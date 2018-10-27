@@ -104,6 +104,25 @@
     [self callback:block code:MSG_SUCCESS data:nil];
 }
 
+/********/
+- (void)popPages:(int)numbers completion:(WXNavigationResultBlock)block withContainer:(UIViewController *)container{
+    NSMutableArray *vcArr = [NSMutableArray arrayWithArray:container.navigationController.viewControllers];
+    if (vcArr.count > numbers) {
+        if (numbers > 1){
+            UIViewController *vc = vcArr[vcArr.count-1 - numbers];
+            [container.navigationController popToViewController:vc animated:YES];
+        }
+        else{
+            [container.navigationController popViewControllerAnimated:YES];
+        }
+    }
+    else{
+        [container.navigationController popViewControllerAnimated:YES];
+    }
+    [self callback:block code:MSG_SUCCESS data:nil];
+}
+/********/
+
 - (void)setNavigationBarHidden:(BOOL)hidden animated:(BOOL)animated
                  withContainer:(UIViewController *)container
 {

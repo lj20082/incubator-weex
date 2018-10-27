@@ -130,7 +130,13 @@ typedef void (^WXNavigationResultBlock)(NSString *code, NSDictionary * responseD
                         completion:(WXNavigationResultBlock)block
                      withContainer:(UIViewController *)container;
 
-    
+
+/********/
+- (void)popPages:(int)numbers
+      completion:(WXNavigationResultBlock)block
+   withContainer:(UIViewController *)container;
+/********/
+
 @optional
     
 /**

@@ -43,6 +43,11 @@ WX_EXPORT_METHOD(@selector(clearNavBarMoreItem:callback:))
 WX_EXPORT_METHOD(@selector(setNavBarTitle:callback:))
 WX_EXPORT_METHOD(@selector(clearNavBarTitle:callback:))
 WX_EXPORT_METHOD(@selector(setNavBarHidden:callback:))
+/********/
+WX_EXPORT_METHOD(@selector(popPages:jsCallback:))
+WX_EXPORT_METHOD(@selector(getPagesNumber:))
+WX_EXPORT_METHOD(@selector(jumpPage:))
+/********/
 
 - (id<WXNavigationProtocol>)navigator
 {
@@ -104,6 +109,49 @@ WX_EXPORT_METHOD(@selector(setNavBarHidden:callback:))
         callback(result);
     }
 }
+
+/********/
+- (void)popPages:(int)numbers jsCallback:(WXModuleKeepAliveCallback)jsCallback{
+    id<WXNavigationProtocol> navigator = [self navigator];
+    UIViewController *container = self.weexInstance.viewController;
+    [navigator popPages:numbers completion:^(NSString *code, NSDictionary *responseData) {
+        if (jsCallback && code) {
+            jsCallback(code,NO);
+        }
+    } withContainer:container];
+}
+
+- (void)getPagesNumber:(WXModuleKeepAliveCallback)jsCallback{
+    NSDictionary *dic = @{@"content" : @(self.weexInstance.viewController.navigationController.viewControllers.count)};
+    NSString *jsonString = nil;
+    NSError *error;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:dic options:NSJSONWritingPrettyPrinted error:&error];
+    if (!jsonData) {
+        NSLog(@"Got an error: %@", error);
+    } else {
+        jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+    }
+    if (jsCallback) jsCallback(@{@"statusCode":@"10001",@"message":@"调用成功",@"content":jsonString?:@"",@"type":@1,@"source":@1},NO);
+}
+
+- (void)jumpPage:(NSString*)link{
+    if (!link.length) return;
+    NSURL *url = [NSURL URLWithString:link];
+    if([[UIDevice currentDevice].systemVersion floatValue] >= 10.0){
+        if ([[UIApplication sharedApplication] respondsToSelector:@selector(openURL:options:completionHandler:)]) {
+            [[UIApplication sharedApplication] openURL:url options:@{}
+                                     completionHandler:nil];
+        } else {
+            [[UIApplication sharedApplication] openURL:url];
+        }
+        
+    } else{
+        if([[UIApplication sharedApplication] canOpenURL:url]){
+            [[UIApplication sharedApplication] openURL:url];
+        }
+    }
+}
+/********/
 
 #pragma mark Navigation Setup
 
