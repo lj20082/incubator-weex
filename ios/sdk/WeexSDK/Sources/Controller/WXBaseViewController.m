@@ -26,12 +26,21 @@
 #import "WXUtility.h"
 #import "WXPrerenderManager.h"
 #import "WXMonitor.h"
+/********/
+#import <UIImage+GIF.h>
+#import <Masonry.h>
+/********/
 
 @interface WXBaseViewController ()
 
 @property (nonatomic, strong) WXSDKInstance *instance;
 @property (nonatomic, strong) UIView *weexView;
 @property (nonatomic, strong) NSURL *sourceURL;
+/********/
+@property (nonatomic, strong) UIView *loadingView;
+@property (nonatomic, strong) UIView *failedView;
+@property (nonatomic, strong) UIButton *reloadButton;
+/********/
 
 @end
 
@@ -135,6 +144,8 @@
     _instance.pageName = sourceURL.absoluteString;
     _instance.viewController = self;
     
+    /********/
+#if DEBUG
     NSString *newURL = nil;
     
     if ([sourceURL.absoluteString rangeOfString:@"?"].location != NSNotFound) {
@@ -144,20 +155,39 @@
     }
     [_instance renderWithURL:[NSURL URLWithString:newURL] options:@{@"bundleUrl":sourceURL.absoluteString} data:nil];
     
+#else
+    NSString *documentFolder = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) lastObject];
+    NSString *downloadJSPath = [documentFolder stringByAppendingPathComponent:[NSString stringWithFormat:@"JS/js/%@",sourceURL.lastPathComponent]];
+    
+    NSString *newURL = [NSString stringWithFormat:@"%@/JS/%@",[[NSBundle mainBundle] pathForResource:@"JSBundle"ofType:@"bundle"],sourceURL.lastPathComponent];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:downloadJSPath]) {
+        newURL = downloadJSPath;
+    }
+    [_instance renderWithURL:[NSURL fileURLWithPath:newURL] options:@{@"bundleUrl":sourceURL.absoluteString} data:nil];
+#endif
+    
     __weak typeof(self) weakSelf = self;
+    
+    [self.view addSubview:self.loadingView];
+    [self.failedView removeFromSuperview];
+    
     _instance.onCreate = ^(UIView *view) {
         [weakSelf.weexView removeFromSuperview];
         weakSelf.weexView = view;
         [weakSelf.view addSubview:weakSelf.weexView];
+        [weakSelf.loadingView removeFromSuperview];
     };
     
     _instance.onFailed = ^(NSError *error) {
-        
+        [weakSelf.loadingView removeFromSuperview];
+        [weakSelf.view addSubview:weakSelf.failedView];
     };
     
     _instance.renderFinish = ^(UIView *view) {
         [weakSelf _updateInstanceState:WeexInstanceAppear];
+        [weakSelf.loadingView removeFromSuperview];
     };
+    /********/
     
     if([WXPrerenderManager isTaskReady:[self.sourceURL absoluteString]]){
         WX_MONITOR_INSTANCE_PERF_START(WXPTJSDownload, _instance);
@@ -206,5 +236,83 @@
 {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
+
+/********/
+#pragma mark - Getter
+
+- (UIView*)loadingView{
+    if (!_loadingView) {
+        _loadingView = [[UIView alloc] initWithFrame:self.view.bounds];
+        
+        NSBundle *bundle = [NSBundle bundleForClass:self.class];
+        NSString *file = [bundle pathForResource:@"js_loading@3x" ofType:@"gif"];
+        if (file == nil) {
+            file = [[NSBundle mainBundle] pathForResource:@"js_loading@3x" ofType:@"gif"];
+        }
+        NSData *data = [NSData dataWithContentsOfFile:file];
+        UIImageView *loadingGif = [[UIImageView alloc] initWithImage:[UIImage sd_animatedGIFWithData:data]];
+        [_loadingView addSubview:loadingGif];
+        [loadingGif mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.centerX.equalTo(self->_loadingView.mas_centerX);
+            make.centerY.equalTo(self->_loadingView.mas_centerY);
+            make.width.height.equalTo(@87);
+        }];
+    }
+    return _loadingView;
+}
+
+- (UIView*)failedView{
+    if (!_failedView) {
+        _failedView = [[UIView alloc] initWithFrame:self.view.bounds];
+        
+        UILabel *label = [UILabel new];
+        label.text = @"加载失败";
+        label.font = [UIFont systemFontOfSize:14];
+        label.textColor = [UIColor colorWithRed:102/255.0 green:102/255.0 blue:102/255.0 alpha:1];
+        [_failedView addSubview:label];
+        [label mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.centerX.equalTo(self->_failedView.mas_centerX);
+            make.bottom.equalTo(self->_failedView.mas_centerY).offset(-30);
+        }];
+        
+        NSBundle *bundle = [NSBundle bundleForClass:self.class];
+        NSString *file = [bundle pathForResource:@"img_default_failed@3x" ofType:@"png"];
+        if (file == nil) {
+            file = [[NSBundle mainBundle] pathForResource:@"img_default_failed@3x" ofType:@"png"];
+        }
+        UIImageView *imageView = [[UIImageView alloc] initWithImage:[UIImage imageWithContentsOfFile:file]];
+        [_failedView addSubview:imageView];
+        [imageView mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.centerX.equalTo(self->_failedView.mas_centerX);
+            make.bottom.equalTo(label.mas_top).offset(-18);
+            make.width.height.equalTo(@130);
+        }];
+        
+        [_failedView addSubview:self.reloadButton];
+        [self.reloadButton mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.centerX.equalTo(self->_failedView.mas_centerX);
+            make.top.equalTo(self->_failedView.mas_centerY).offset(30);
+            make.width.equalTo(@120);
+            make.height.equalTo(@40);
+        }];
+    }
+    return _failedView;
+}
+
+- (UIButton*)reloadButton{
+    if (!_reloadButton) {
+        _reloadButton = [UIButton buttonWithType:UIButtonTypeCustom];
+        _reloadButton.titleLabel.font = [UIFont systemFontOfSize:14];
+        [_reloadButton setTitle:@"点击重试" forState:UIControlStateNormal];
+        UIColor *tempColor = [UIColor colorWithRed:255/255.0 green:107/255.0 blue:68/255.0 alpha:1];
+        [_reloadButton setTitleColor:tempColor forState:UIControlStateNormal];
+        _reloadButton.layer.borderWidth = 1;
+        _reloadButton.layer.borderColor = tempColor.CGColor;
+        _reloadButton.layer.cornerRadius = 20;
+        [_reloadButton addTarget:self action:@selector(refreshWeex) forControlEvents:UIControlEventTouchUpInside];
+    }
+    return _reloadButton;
+}
+/********/
 
 @end

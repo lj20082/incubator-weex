@@ -26,7 +26,7 @@ Pod::Spec.new do |s|
   s.ios.deployment_target = '8.0'
   s.source =  { :path => '.' }
   s.source_files = 'ios/sdk/WeexSDK/Sources/**/*.{h,m,mm,c,cpp,cc}'
-  s.resources = 'pre-build/*.js','ios/sdk/WeexSDK/Resources/wx_load_error@3x.png'
+  s.resources = 'pre-build/*.js','ios/sdk/WeexSDK/Resources/wx_load_error@3x.png','ios/sdk/WeexSDK/Resources/js_loading@3x.gif','ios/sdk/WeexSDK/Resources/img_default_failed@3x.png'
 
   s.user_target_xcconfig  = { 'FRAMEWORK_SEARCH_PATHS' => "'$(PODS_ROOT)/WeexSDK'" }
   s.requires_arc = true
@@ -56,4 +56,7 @@ Pod::Spec.new do |s|
     w.libraries = "stdc++"
   end
 
+  s.dependency 'SDWebImage', '3.8.2'
+  s.dependency 'Masonry'
+  s.dependency 'YYCache'
 end
