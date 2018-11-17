@@ -58,5 +58,5 @@ Pod::Spec.new do |s|
 
   s.dependency 'SDWebImage', '3.8.2'
   s.dependency 'Masonry'
-  s.dependency 'YYCache'
+  #s.dependency 'YYCache'
 end
