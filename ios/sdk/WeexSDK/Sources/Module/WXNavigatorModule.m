@@ -47,6 +47,8 @@ WX_EXPORT_METHOD(@selector(setNavBarHidden:callback:))
 WX_EXPORT_METHOD(@selector(popPages:jsCallback:))
 WX_EXPORT_METHOD(@selector(getPagesNumber:))
 WX_EXPORT_METHOD(@selector(jumpPage:))
+WX_EXPORT_METHOD(@selector(getPagesUrl:))
+WX_EXPORT_METHOD(@selector(removePages:jsCallback:))
 /********/
 
 - (id<WXNavigationProtocol>)navigator
@@ -123,15 +125,13 @@ WX_EXPORT_METHOD(@selector(jumpPage:))
 
 - (void)getPagesNumber:(WXModuleKeepAliveCallback)jsCallback{
     NSDictionary *dic = @{@"content" : @(self.weexInstance.viewController.navigationController.viewControllers.count)};
-    NSString *jsonString = nil;
-    NSError *error;
-    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:dic options:NSJSONWritingPrettyPrinted error:&error];
-    if (!jsonData) {
-        NSLog(@"Got an error: %@", error);
-    } else {
-        jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+    NSString *jsonString = [self convertToJsonStringWithObject:dic];
+    if (jsonString.length) {
+        if (jsCallback) jsCallback(@{@"statusCode":@"10001",@"message":@"调用成功",@"content":jsonString,@"type":@1,@"source":@1},NO);
     }
-    if (jsCallback) jsCallback(@{@"statusCode":@"10001",@"message":@"调用成功",@"content":jsonString?:@"",@"type":@1,@"source":@1},NO);
+    else{
+        if (jsCallback) jsCallback(@{@"statusCode":@"10002",@"message":@"调用失败",@"content":@"",@"type":@1,@"source":@1},NO);
+    }
 }
 
 - (void)jumpPage:(NSString*)link{
@@ -150,6 +150,75 @@ WX_EXPORT_METHOD(@selector(jumpPage:))
             [[UIApplication sharedApplication] openURL:url];
         }
     }
+}
+
+- (NSString*)convertToJsonStringWithObject:(id)obj{
+    NSString *jsonString = nil;
+    NSError *error;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:obj options:NSJSONWritingPrettyPrinted error:&error];
+    if (!jsonData) {
+        NSLog(@"Got an error: %@", error);
+    } else {
+        jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+    }
+    return jsonString;
+}
+
+- (NSArray*)getCurrentNavigatorSubVCUrls{
+    NSMutableArray *urlArr = [NSMutableArray new];
+    [self.weexInstance.viewController.navigationController.viewControllers enumerateObjectsUsingBlock:^(__kindof UIViewController * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        NSURL *url = [self getProperty:@"sourceURL" fromObject:obj];
+        if (url.absoluteString.length) {
+            [urlArr addObject:url.absoluteString];
+        }
+    }];
+    return urlArr;
+}
+
+- (void)getPagesUrl:(WXModuleKeepAliveCallback)jsCallback{
+    NSArray *urlArr = [self getCurrentNavigatorSubVCUrls];
+    
+    if (urlArr.count) {
+        NSDictionary *dic = @{@"content" : [self convertToJsonStringWithObject:urlArr]?:@""};
+        NSString *jsonString = [self convertToJsonStringWithObject:dic];
+        if (jsonString.length) {
+            if (jsCallback) jsCallback(@{@"statusCode":@"10001",@"message":@"调用成功",@"content":jsonString,@"type":@1,@"source":@1},NO);
+        }
+        else{
+            if (jsCallback) jsCallback(@{@"statusCode":@"10002",@"message":@"调用失败",@"content":@"",@"type":@1,@"source":@1},NO);
+        }
+    }
+    else{
+        if (jsCallback) jsCallback(@{@"statusCode":@"10002",@"message":@"调用失败",@"content":@"",@"type":@1,@"source":@1},NO);
+    }
+}
+
+- (id)getProperty:(NSString *)propertyName fromObject:(NSObject*)obj{
+    if (!propertyName.length || !obj) return nil;
+    Ivar iVar = class_getInstanceVariable([obj class], [propertyName UTF8String]);
+    
+    if (iVar == nil) {
+        iVar = class_getInstanceVariable([obj class], [[NSString stringWithFormat:@"_%@",propertyName] UTF8String]);
+    }
+    
+    id propertyVal = object_getIvar(obj, iVar);
+    return propertyVal;
+}
+
+- (void)removePages:(NSArray*)urlArr jsCallback:(WXModuleKeepAliveCallback)jsCallback{
+    if (!urlArr.count){
+        if (jsCallback) jsCallback(@{@"statusCode":@"10002",@"message":@"调用失败",@"content":@"",@"type":@1,@"source":@1},NO);
+        return;
+    }
+    NSMutableArray *currentVCs = [NSMutableArray arrayWithArray:self.weexInstance.viewController.navigationController.viewControllers];
+    [self.weexInstance.viewController.navigationController.viewControllers enumerateObjectsUsingBlock:^(__kindof UIViewController * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        NSURL *url = [self getProperty:@"sourceURL" fromObject:obj];
+        if (url && url.absoluteString.length && [urlArr indexOfObject:url.absoluteString] != NSNotFound) {
+            [currentVCs removeObject:obj];
+        }
+    }];
+    self.weexInstance.viewController.navigationController.viewControllers = currentVCs;
+    if (jsCallback) jsCallback(@{@"statusCode":@"10001",@"message":@"调用成功",@"content":@"",@"type":@1,@"source":@1},NO);
 }
 /********/
 
