@@ -125,9 +125,8 @@ WX_EXPORT_METHOD(@selector(removePages:jsCallback:))
 
 - (void)getPagesNumber:(WXModuleKeepAliveCallback)jsCallback{
     NSDictionary *dic = @{@"content" : @(self.weexInstance.viewController.navigationController.viewControllers.count)};
-    NSString *jsonString = [self convertToJsonStringWithObject:dic];
-    if (jsonString.length) {
-        if (jsCallback) jsCallback(@{@"statusCode":@"10001",@"message":@"调用成功",@"content":jsonString,@"type":@1,@"source":@1},NO);
+    if (dic.count) {
+        if (jsCallback) jsCallback(@{@"statusCode":@"10001",@"message":@"调用成功",@"content":dic,@"type":@1,@"source":@1},NO);
     }
     else{
         if (jsCallback) jsCallback(@{@"statusCode":@"10002",@"message":@"调用失败",@"content":@"",@"type":@1,@"source":@1},NO);
@@ -152,18 +151,6 @@ WX_EXPORT_METHOD(@selector(removePages:jsCallback:))
     }
 }
 
-- (NSString*)convertToJsonStringWithObject:(id)obj{
-    NSString *jsonString = nil;
-    NSError *error;
-    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:obj options:NSJSONWritingPrettyPrinted error:&error];
-    if (!jsonData) {
-        NSLog(@"Got an error: %@", error);
-    } else {
-        jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
-    }
-    return jsonString;
-}
-
 - (NSArray*)getCurrentNavigatorSubVCUrls{
     NSMutableArray *urlArr = [NSMutableArray new];
     [self.weexInstance.viewController.navigationController.viewControllers enumerateObjectsUsingBlock:^(__kindof UIViewController * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
@@ -179,10 +166,9 @@ WX_EXPORT_METHOD(@selector(removePages:jsCallback:))
     NSArray *urlArr = [self getCurrentNavigatorSubVCUrls];
     
     if (urlArr.count) {
-        NSDictionary *dic = @{@"content" : [self convertToJsonStringWithObject:urlArr]?:@""};
-        NSString *jsonString = [self convertToJsonStringWithObject:dic];
-        if (jsonString.length) {
-            if (jsCallback) jsCallback(@{@"statusCode":@"10001",@"message":@"调用成功",@"content":jsonString,@"type":@1,@"source":@1},NO);
+        NSDictionary *dic = @{@"content" : urlArr};
+        if (dic.count) {
+            if (jsCallback) jsCallback(@{@"statusCode":@"10001",@"message":@"调用成功",@"content":dic,@"type":@1,@"source":@1},NO);
         }
         else{
             if (jsCallback) jsCallback(@{@"statusCode":@"10002",@"message":@"调用失败",@"content":@"",@"type":@1,@"source":@1},NO);
