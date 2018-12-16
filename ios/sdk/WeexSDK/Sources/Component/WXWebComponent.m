@@ -62,6 +62,8 @@
 
 @property (nonatomic, assign) BOOL notifyEvent;
 
+@property (nonatomic, assign) BOOL pageHeightEvent;
+
 @end
 
 @implementation WXWebComponent
@@ -156,6 +158,9 @@ WX_EXPORT_METHOD(@selector(goForward))
     }
     else if ([eventName isEqualToString:@"pagefinish"]) {
         _finishLoadEvent = YES;
+    }
+    else if ([eventName isEqualToString:@"pageHeight"]) {
+        _pageHeightEvent = YES;
     }
     else if ([eventName isEqualToString:@"error"]) {
         _failLoadEvent = YES;
@@ -274,6 +279,11 @@ WX_EXPORT_METHOD(@selector(goForward))
     if (_finishLoadEvent) {
         NSDictionary *data = [self baseInfo];
         [self fireEvent:@"pagefinish" params:data domChanges:@{@"attrs": @{@"src":self.webview.request.URL.absoluteString}}];
+    }
+    if (_pageHeightEvent) {
+        CGFloat clientHeight = [[webView stringByEvaluatingJavaScriptFromString:@"document.body.clientHeight"] floatValue];
+        CGFloat scrollHeight = [[webView stringByEvaluatingJavaScriptFromString:@"document.body.scrollHeight"] floatValue];
+        [self fireEvent:@"pageHeight" params:@{@"webViewHeight" : @(clientHeight+scrollHeight)} domChanges:@{@"attrs": @{@"src":self.webview.request.URL.absoluteString}}];
     }
 }
 
