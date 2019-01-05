@@ -267,12 +267,12 @@
         
         UILabel *label = [UILabel new];
         label.text = @"加载失败";
-        label.font = [UIFont systemFontOfSize:14];
-        label.textColor = [UIColor colorWithRed:102/255.0 green:102/255.0 blue:102/255.0 alpha:1];
+        label.font = [UIFont systemFontOfSize:16];
+        label.textColor = [UIColor colorWithRed:140/255.0 green:140/255.0 blue:140/255.0 alpha:1];
         [_failedView addSubview:label];
         [label mas_makeConstraints:^(MASConstraintMaker *make) {
             make.centerX.equalTo(self->_failedView.mas_centerX);
-            make.bottom.equalTo(self->_failedView.mas_centerY).offset(-30);
+            make.bottom.equalTo(self->_failedView.mas_centerY).offset(30);
         }];
         
         NSBundle *bundle = [NSBundle bundleForClass:self.class];
@@ -284,14 +284,13 @@
         [_failedView addSubview:imageView];
         [imageView mas_makeConstraints:^(MASConstraintMaker *make) {
             make.centerX.equalTo(self->_failedView.mas_centerX);
-            make.bottom.equalTo(label.mas_top).offset(-18);
-            make.width.height.equalTo(@130);
+            make.bottom.equalTo(label.mas_top);
         }];
         
         [_failedView addSubview:self.reloadButton];
         [self.reloadButton mas_makeConstraints:^(MASConstraintMaker *make) {
             make.centerX.equalTo(self->_failedView.mas_centerX);
-            make.top.equalTo(self->_failedView.mas_centerY).offset(30);
+            make.top.equalTo(label.mas_bottom).offset(66);
             make.width.equalTo(@180);
             make.height.equalTo(@40);
         }];
