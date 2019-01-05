@@ -292,7 +292,7 @@
         [self.reloadButton mas_makeConstraints:^(MASConstraintMaker *make) {
             make.centerX.equalTo(self->_failedView.mas_centerX);
             make.top.equalTo(self->_failedView.mas_centerY).offset(30);
-            make.width.equalTo(@120);
+            make.width.equalTo(@180);
             make.height.equalTo(@40);
         }];
     }
@@ -302,12 +302,10 @@
 - (UIButton*)reloadButton{
     if (!_reloadButton) {
         _reloadButton = [UIButton buttonWithType:UIButtonTypeCustom];
-        _reloadButton.titleLabel.font = [UIFont systemFontOfSize:14];
-        [_reloadButton setTitle:@"点击重试" forState:UIControlStateNormal];
-        UIColor *tempColor = [UIColor colorWithRed:255/255.0 green:107/255.0 blue:68/255.0 alpha:1];
-        [_reloadButton setTitleColor:tempColor forState:UIControlStateNormal];
-        _reloadButton.layer.borderWidth = 1;
-        _reloadButton.layer.borderColor = tempColor.CGColor;
+        _reloadButton.titleLabel.font = [UIFont systemFontOfSize:16];
+        [_reloadButton setTitle:@"重试" forState:UIControlStateNormal];
+        [_reloadButton setBackgroundColor:[UIColor colorWithRed:35/255.0 green:194/255.0 blue:247/255.0 alpha:1]];
+        [_reloadButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         _reloadButton.layer.cornerRadius = 20;
         [_reloadButton addTarget:self action:@selector(refreshWeex) forControlEvents:UIControlEventTouchUpInside];
     }
