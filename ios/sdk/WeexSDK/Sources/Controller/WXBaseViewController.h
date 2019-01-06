@@ -43,4 +43,8 @@
  */
 - (void)refreshWeex;
 
+/********/
+@property (nonatomic, assign) BOOL disableSwipe;
+/********/
+
 @end
