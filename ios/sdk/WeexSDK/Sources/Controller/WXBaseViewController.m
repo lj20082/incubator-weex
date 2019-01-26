@@ -145,25 +145,35 @@
     _instance.viewController = self;
     
     /********/
+    dispatch_block_t renderNetWorkURLBlock = ^{
+        NSString *newURL = nil;
+        
+        if ([sourceURL.absoluteString rangeOfString:@"?"].location != NSNotFound) {
+            newURL = [NSString stringWithFormat:@"%@&random=%d", sourceURL.absoluteString, arc4random()];
+        } else {
+            newURL = [NSString stringWithFormat:@"%@?random=%d", sourceURL.absoluteString, arc4random()];
+        }
+        [_instance renderWithURL:[NSURL URLWithString:newURL] options:@{@"bundleUrl":sourceURL.absoluteString} data:nil];
+    };
 #if DEBUG
-    NSString *newURL = nil;
-    
-    if ([sourceURL.absoluteString rangeOfString:@"?"].location != NSNotFound) {
-        newURL = [NSString stringWithFormat:@"%@&random=%d", sourceURL.absoluteString, arc4random()];
-    } else {
-        newURL = [NSString stringWithFormat:@"%@?random=%d", sourceURL.absoluteString, arc4random()];
-    }
-    [_instance renderWithURL:[NSURL URLWithString:newURL] options:@{@"bundleUrl":sourceURL.absoluteString} data:nil];
-    
+    renderNetWorkURLBlock();
 #else
     NSString *documentFolder = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) lastObject];
-    NSString *downloadJSPath = [documentFolder stringByAppendingPathComponent:[NSString stringWithFormat:@"JS/js/%@",sourceURL.lastPathComponent]];
+    NSString *downloadJSFolderPath = [documentFolder stringByAppendingPathComponent:@"JS/js/"];
+    NSString *downloadJSPath = [downloadJSFolderPath stringByAppendingPathComponent:[NSString stringWithFormat:@"%@",sourceURL.lastPathComponent]];
     
     NSString *newURL = [NSString stringWithFormat:@"%@/JS/%@",[[NSBundle mainBundle] pathForResource:@"JSBundle"ofType:@"bundle"],sourceURL.lastPathComponent];
     if ([[NSFileManager defaultManager] fileExistsAtPath:downloadJSPath]) {
-        newURL = downloadJSPath;
+        [_instance renderWithURL:[NSURL fileURLWithPath:downloadJSPath] options:@{@"bundleUrl":sourceURL.absoluteString} data:nil];
     }
-    [_instance renderWithURL:[NSURL fileURLWithPath:newURL] options:@{@"bundleUrl":sourceURL.absoluteString} data:nil];
+    else{
+        if ([[NSFileManager defaultManager] fileExistsAtPath:newURL] && ![[NSFileManager defaultManager] fileExistsAtPath:downloadJSFolderPath]) {
+            [_instance renderWithURL:[NSURL fileURLWithPath:newURL] options:@{@"bundleUrl":sourceURL.absoluteString} data:nil];
+        }
+        else{
+            renderNetWorkURLBlock();
+        }
+    }
 #endif
     
     __weak typeof(self) weakSelf = self;
