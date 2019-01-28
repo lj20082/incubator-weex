@@ -254,15 +254,19 @@
     if (!_loadingView) {
         _loadingView = [[UIView alloc] initWithFrame:self.view.bounds];
         
-        UIActivityIndicatorView *activityIndicatorView = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
-        activityIndicatorView.color = [UIColor colorWithRed:35/255.0 green:194/255.0 blue:247/255.0 alpha:1];
-        activityIndicatorView.hidesWhenStopped = YES;
-        [_loadingView addSubview:activityIndicatorView];
-        [activityIndicatorView mas_makeConstraints:^(MASConstraintMaker *make) {
+        NSBundle *bundle = [NSBundle bundleForClass:self.class];
+        NSString *file = [bundle pathForResource:@"js_loading@3x" ofType:@"gif"];
+        if (file == nil) {
+            file = [[NSBundle mainBundle] pathForResource:@"js_loading@3x" ofType:@"gif"];
+        }
+        NSData *data = [NSData dataWithContentsOfFile:file];
+        UIImageView *loadingGif = [[UIImageView alloc] initWithImage:[UIImage sd_animatedGIFWithData:data]];
+        [_loadingView addSubview:loadingGif];
+        [loadingGif mas_makeConstraints:^(MASConstraintMaker *make) {
             make.centerX.equalTo(self->_loadingView.mas_centerX);
             make.centerY.equalTo(self->_loadingView.mas_centerY);
+            make.width.height.equalTo(@87);
         }];
-        [activityIndicatorView startAnimating];
     }
     return _loadingView;
 }
