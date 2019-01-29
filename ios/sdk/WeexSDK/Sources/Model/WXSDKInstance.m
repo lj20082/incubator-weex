@@ -639,6 +639,20 @@ typedef enum : NSUInteger {
     [[WXSDKManager bridgeMgr] refreshInstance:self.instanceId data:data];
 }
 
+/********/
+- (NSString*)convertToJsonStringWithDic:(NSDictionary*)dic{
+    NSString *jsonString = nil;
+    NSError *error;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:dic options:NSJSONWritingPrettyPrinted error:&error];
+    if (!jsonData) {
+        NSLog(@"Got an error: %@", error);
+    } else {
+        jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+    }
+    return jsonString;
+}
+/********/
+
 - (void)destroyInstance
 {
     [self.apmInstance endRecord];
@@ -656,6 +670,14 @@ typedef enum : NSUInteger {
         [pageEvent pageDestroy:self.instanceId];
     }
     [[NSNotificationCenter defaultCenter] postNotificationName:WX_INSTANCE_WILL_DESTROY_NOTIFICATION object:nil userInfo:@{@"instanceId":self.instanceId}];
+    
+    /********/
+    NSDictionary *dic = @{@"currentUrl":self.scriptURL.absoluteString?:@""};
+    NSString *jsonString = [self convertToJsonStringWithDic:dic];
+    if (jsonString.length) {
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"customDestroyInstanceNotification" object:nil userInfo:@{@"instanceId":self.instanceId,@"param":@{@"statusCode":@"10001",@"message":@"调用成功",@"content":jsonString,@"type":@1,@"source":@1}}];
+    }
+    /********/
     
     [WXTracingManager destroyTraincgTaskWithInstance:self.instanceId];
 
