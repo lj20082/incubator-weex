@@ -282,7 +282,9 @@ WX_EXPORT_METHOD(@selector(goForward))
     }
     if (_pageHeightEvent) {
         CGFloat offsetHeight = [[webView stringByEvaluatingJavaScriptFromString:@"document.body.offsetHeight"] floatValue];
-        [self fireEvent:@"pageHeight" params:@{@"webViewHeight" : @(offsetHeight*2)} domChanges:@{@"attrs": @{@"src":self.webview.request.URL.absoluteString}}];
+        CGFloat offsetWidth = [[webView stringByEvaluatingJavaScriptFromString:@"document.body.offsetWidth"] floatValue];
+        NSDictionary *initDic = @{@"webViewHeight" : @(offsetHeight), @"offsetWidth" : @(offsetWidth)};
+        [self fireEvent:@"pageHeight" params:initDic domChanges:@{@"attrs": @{@"src":self.webview.request.URL.absoluteString}}];
     }
 }
 
