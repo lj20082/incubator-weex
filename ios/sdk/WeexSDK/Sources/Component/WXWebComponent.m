@@ -64,6 +64,8 @@
 
 @property (nonatomic, assign) BOOL pageHeightEvent;
 
+@property (nonatomic, assign) BOOL scrollable;
+
 @end
 
 @implementation WXWebComponent
@@ -82,6 +84,7 @@ WX_EXPORT_METHOD(@selector(goForward))
             self.inInitsource = attributes[@"source"];
         }
         
+        self.scrollable = attributes[@"scrollable"] ? [WXConvert BOOL:attributes[@"scrollable"]] : YES;
     }
     return self;
 }
@@ -99,6 +102,7 @@ WX_EXPORT_METHOD(@selector(goForward))
     _webview.scalesPageToFit = YES;
     [_webview setBackgroundColor:[UIColor clearColor]];
     _webview.opaque = NO;
+    _webview.scrollView.scrollEnabled = _scrollable;
     _jsContext = [_webview valueForKeyPath:@"documentView.webView.mainFrame.javaScriptContext"];
     __weak typeof(self) weakSelf = self;
 
@@ -148,6 +152,11 @@ WX_EXPORT_METHOD(@selector(goForward))
     if (attributes[@"source"]) {
         self.inInitsource = attributes[@"source"];
         self.source = self.inInitsource;
+    }
+    
+    if (attributes[@"scrollable"]) {
+        self.scrollable = attributes[@"scrollable"] ? [WXConvert BOOL:attributes[@"scrollable"]] : YES;
+        _webview.scrollView.scrollEnabled = self.scrollable;
     }
 }
 
