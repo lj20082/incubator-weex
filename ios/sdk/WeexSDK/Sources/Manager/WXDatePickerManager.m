@@ -60,6 +60,7 @@
         if(!datePicker)
         {
             datePicker = [[UIDatePicker alloc]init];
+            datePicker.timeZone = [NSTimeZone systemTimeZone];
         }
         
         datePicker.datePickerMode=UIDatePickerModeDate;
