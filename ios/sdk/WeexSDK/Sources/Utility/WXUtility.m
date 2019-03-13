@@ -893,7 +893,10 @@ CGFloat WXFloorPixelValue(CGFloat value)
 {
     NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
     [dateFormatter setDateFormat:@"HH:mm"];
-    NSString *str = [dateFormatter stringFromDate:date];
+    NSTimeZone *timeZone = [NSTimeZone systemTimeZone];
+    NSInteger seconds = [timeZone secondsFromGMTForDate:date];
+    NSDate *newDate = [date dateByAddingTimeInterval:seconds];
+    NSString *str = [dateFormatter stringFromDate:newDate];
     return str;
 }
 
