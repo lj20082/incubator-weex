@@ -49,7 +49,7 @@ typedef id (^WXDataBindingBlock)(NSDictionary *data, BOOL *needUpdate);
     /**
      *  View
      */
-    UIColor *_backgroundColor;
+    UIColor *_styleBackgroundColor;
     NSString *_backgroundImage;
     NSString *_clipRadius;
     WXClipType _clipToBounds;
@@ -71,6 +71,8 @@ typedef id (^WXDataBindingBlock)(NSDictionary *data, BOOL *needUpdate);
     NSString * _groupAccessibilityChildren; // voice-over navigation order
     NSString * _testId;// just for auto-test
     
+    BOOL _userInteractionEnabled;
+    BOOL _eventPenetrationEnabled;
     BOOL _accessibilityMagicTapEvent;
     
     /**
@@ -90,6 +92,8 @@ typedef id (^WXDataBindingBlock)(NSDictionary *data, BOOL *needUpdate);
     UILongPressGestureRecognizer *_longPressGesture;
     UIPanGestureRecognizer *_panGesture;
     
+    BOOL _cancelsTouchesInView;
+    
     BOOL _listenPanStart;
     BOOL _listenPanMove;
     BOOL _listenPanEnd;
@@ -98,6 +102,7 @@ typedef id (^WXDataBindingBlock)(NSDictionary *data, BOOL *needUpdate);
     BOOL _listenVerticalPan;
     
     BOOL _listenStopPropagation;
+    BOOL _customEvent;
     NSString *_stopPropagationName;
     WXTouchGestureRecognizer* _touchGesture;
     
@@ -128,6 +133,8 @@ typedef id (^WXDataBindingBlock)(NSDictionary *data, BOOL *needUpdate);
     WXBorderStyle _borderRightStyle;
     WXBorderStyle _borderBottomStyle;
     WXBorderStyle _borderLeftStyle;
+    
+    NSInteger _lastBorderRecords; // Records last border drawing
     
     BOOL _isViewTreeIgnored; // Component is added to super, but it is not added to views.
     BOOL _isFixed;
@@ -163,10 +170,15 @@ typedef id (^WXDataBindingBlock)(NSDictionary *data, BOOL *needUpdate);
     NSMutableDictionary<NSString *, NSArray *> *_eventParameters;
 }
 
-/* _transform may be modified in mutiple threads. DO NOT use "_transform = XXX" directly.
+/* DO NOT use "_transform = XXX" directly.
  Ivar access in ObjC is compiled to code with additional release or retain. So use Ivar in mutiple
  thread may lead to crash. Use an ATOMIC property is well enough. */
 @property (atomic, strong) WXTransform *transform;
+
+/**
+ DO NOT use "_backgroundColor" directly. The same reason as '_transform'.
+ */
+@property (atomic, strong) UIColor* styleBackgroundColor;
 
 ///--------------------------------------
 /// @name Package Internal Methods
@@ -219,7 +231,7 @@ typedef id (^WXDataBindingBlock)(NSDictionary *data, BOOL *needUpdate);
 
 - (void)_setRenderObject:(void *)object;
 
-- (BOOL)_isCaculatedFrameChanged:(CGRect)frame;
+- (BOOL)_isCalculatedFrameChanged:(CGRect)frame;
 
 - (CGFloat)_getInnerContentMainSize;
 
@@ -282,5 +294,11 @@ typedef id (^WXDataBindingBlock)(NSDictionary *data, BOOL *needUpdate);
 - (void)detachSlotEvent:(NSDictionary *)data;
 
 - (void)_buildViewHierarchyLazily;
+
+- (void)_setIsLayoutRTL:(BOOL)isRTL;
+
+- (void)_adjustForRTL;
+
+- (BOOL)_isAffineTypeAs:(NSString *)type;
 
 @end

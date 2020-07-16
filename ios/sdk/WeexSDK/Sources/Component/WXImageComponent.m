@@ -56,6 +56,8 @@ static dispatch_queue_t WXImageUpdateQueue;
     NSString * _imageSrc;
     pthread_mutex_t _imageSrcMutex;
     pthread_mutexattr_t _propertMutexAttr;
+    BOOL _shouldUpdateImage;
+    BOOL _mainImageSuccess;
 }
 
 @property (atomic, strong) NSString *placeholdSrc;
@@ -80,6 +82,7 @@ WX_EXPORT_METHOD(@selector(save:))
 - (instancetype)initWithRef:(NSString *)ref type:(NSString *)type styles:(NSDictionary *)styles attributes:(NSDictionary *)attributes events:(NSArray *)events weexInstance:(WXSDKInstance *)weexInstance
 {
     if (self = [super initWithRef:ref type:type styles:styles attributes:attributes events:events weexInstance:weexInstance]) {
+        _shouldUpdateImage = NO;
         _async = YES;
         if (!WXImageUpdateQueue) {
             WXImageUpdateQueue = dispatch_queue_create("com.taobao.weex.ImageUpdateQueue", DISPATCH_QUEUE_SERIAL);
@@ -111,11 +114,8 @@ WX_EXPORT_METHOD(@selector(save:))
         if (attributes[@"quality"]) {
             _imageQuality = [WXConvert WXImageQuality:attributes[@"quality"]];
         }
-        id<WXConfigCenterProtocol> configCenter = [WXSDKEngine handlerForProtocol:@protocol(WXConfigCenterProtocol)];
+        
         _downloadImageWithURL = YES;
-        if ([configCenter respondsToSelector:@selector(configForKey:defaultValue:isDefault:)]) {
-            _downloadImageWithURL = [[configCenter configForKey:@"iOS_weex_ext_config.downloadImageWithURL" defaultValue:@(YES) isDefault:NULL] boolValue];
-        }
         if (attributes[@"compositing"]) {
             _downloadImageWithURL = [WXConvert BOOL:attributes[@"compositing"]];
         }
@@ -382,18 +382,52 @@ WX_EXPORT_METHOD(@selector(save:))
     [self updateImage];
 }
 
+- (void)layoutDidFinish
+{
+    [super layoutDidFinish];
+    if (_shouldUpdateImage) {
+        [self updateImage];
+        _shouldUpdateImage = NO;
+    }
+}
+
 - (void)updateImage
 {
+    if (CGSizeEqualToSize(_view.frame.size, CGSizeZero)) {
+        _shouldUpdateImage = YES;
+        return;
+    }
     __weak typeof(self) weakSelf = self;
     if (_downloadImageWithURL && [[self imageLoader] respondsToSelector:@selector(setImageViewWithURL:url:placeholderImage:options:progress:completed:)]) {
+        _mainImageSuccess = NO;
+        
         NSString *newURL = nil;
         if (self.placeholdSrc) {
             newURL = [self.placeholdSrc copy];
             WX_REWRITE_URL([self placeholdSrc], WXResourceTypeImage, self.weexInstance)
-            NSDictionary* extInfo = @{@"instanceId":[self _safeInstanceId]};
-            [[self imageLoader] setImageViewWithURL:(UIImageView*)self.view url:[NSURL URLWithString:newURL] placeholderImage:nil options:extInfo progress:nil completed:nil];
+            NSDictionary* extInfo = @{@"instanceId":[self _safeInstanceId], @"pageURL": self.weexInstance.scriptURL ?: @""};
+            [[self imageLoader] setImageViewWithURL:(UIImageView*)self.view url:[NSURL URLWithString:newURL] placeholderImage:nil options:extInfo progress:nil completed:^(UIImage *image, NSError *error, WXImageLoaderCacheType cacheType, NSURL *imageURL) {
+                /* We cannot rely on image library even if we call setImage with placeholer before calling setImage with real url.
+                 The placeholder image may be downloaded and decoded after the real url, so finally we show the placeholder image by wrong. */
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (strongSelf) {
+                    UIImageView *imageView = (UIImageView *)strongSelf.view;
+                    if (imageView && imageView.image == image && strongSelf->_mainImageSuccess) {
+                        // reload image with main image url
+                        NSString* newURL = [[strongSelf imageSrc] copy];
+                        WX_REWRITE_URL([strongSelf imageSrc], WXResourceTypeImage, strongSelf.weexInstance)
+                        NSDictionary *userInfo = @{@"imageQuality":@(strongSelf.imageQuality), @"imageSharp":@(strongSelf.imageSharp),  @"blurRadius":@(strongSelf.blurRadius), @"instanceId":[strongSelf _safeInstanceId], @"pageURL": strongSelf.weexInstance.scriptURL ?: @""};
+                        [[strongSelf imageLoader] setImageViewWithURL:imageView url:[NSURL URLWithString:newURL] placeholderImage:nil options:userInfo progress:nil completed:^(UIImage *image, NSError *error, WXImageLoaderCacheType cacheType, NSURL *imageURL) {
+                            WXLogInfo(@"Image re-requested because placeholder may override main image. %@", imageURL);
+                        }];
+                    }
+                }
+            }];
         }
         newURL = [[self imageSrc] copy];
+        if ([newURL length] == 0) {
+            return;
+        }
         WX_REWRITE_URL([self imageSrc], WXResourceTypeImage, self.weexInstance)
         NSDictionary *userInfo = @{@"imageQuality":@(self.imageQuality), @"imageSharp":@(self.imageSharp),  @"blurRadius":@(self.blurRadius), @"instanceId":[self _safeInstanceId], @"pageURL": self.weexInstance.scriptURL ?: @""};
         [[self imageLoader] setImageViewWithURL:(UIImageView*)self.view url:[NSURL URLWithString:newURL] placeholderImage:nil options:userInfo progress:^(NSInteger receivedSize, NSInteger expectedSize) {
@@ -421,6 +455,10 @@ WX_EXPORT_METHOD(@selector(save:))
                                                         completed:nil];
                     return;
                 }
+                strongSelf->_mainImageSuccess = NO;
+            }
+            else {
+                strongSelf->_mainImageSuccess = YES;
             }
             UIImageView *imageView = (UIImageView *)strongSelf.view;
             if (imageView && imageView.image != image) {
@@ -597,6 +635,10 @@ WX_EXPORT_METHOD(@selector(save:))
 
 - (void)cancelImage
 {
+    if ([[self imageLoader] respondsToSelector:@selector(cancelCurrentImageLoad:)]) {
+        [[self imageLoader] cancelCurrentImageLoad:(UIImageView*)_view];
+    }
+    _shouldUpdateImage = NO;
     [_imageOperation cancel];
     _imageOperation = nil;
     [_placeholderOperation cancel];

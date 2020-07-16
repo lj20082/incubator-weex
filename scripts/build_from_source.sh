@@ -16,28 +16,43 @@
 # specific language governing permissions and limitations
 # under the License.
 
+# This script is used to build weex from source, One may invoke this script by 
+# scripts/build_from_source.sh 
+
 set -e
 if [ ! -f scripts/build_from_source.sh ];then
-    echo "This script must execute in project root"
+    echo "This script must be executed from project root."
     exit 1
 fi
 
-echo "Build Weex SDK From Source...."
+echo "Build Weex SDK from source...."
 
 npm install
 npm run build:jsfm
 npm run build:polyfill
+npm run build:rax
 
 echo "Weex JS Framework build completed."
 sleep 2
 
-cp pre-build/weex-js-framework.min.js ios_sdk/WeexSDK/Resources/main.js
-cp pre-build/weex-js-framework.min.js android_sdk/assets/main.js
+# Copy built JS resources to their destination.
+[ -d pre-build ] || mkdir pre-build
+cp dist/weex-js-framework.min.js pre-build/native-bundle-main.js
+cp dist/weex-js-framework.min.js pre-build/weex-main-jsfm.js
+cp dist/weex-polyfill.min.js pre-build/weex-polyfill.js
+cp dist/weex-rax.min.js pre-build/weex-rax-api.js
 
-gradle wrapper --gradle-version 3.3
-echo 'include ":android_sdk"'>settings.gradle
-./gradlew :android_sdk:assemble -PasfRelease
+# Build android_sdk
+cd android/
+if [ ! -d "gradle" ]
+then
+    gradle wrapper --gradle-version 4.10.1
+fi
 
-xcodebuild -project ios_sdk/WeexSDK.xcodeproj -target WeexSDK_MTL
+./gradlew :weex_sdk:clean :weex_sdk:assembleRelease -PignoreVersionCheck="true" -PbuildRuntimeApi=true -PapachePackageName="true"
+cd ..
+
+# Build iOS sdk
+xcodebuild -project ios/sdk/WeexSDK.xcodeproj -scheme WeexSDK_MTL
 
 echo "Weex SDK Build completed."

@@ -21,13 +21,26 @@
 #define WEEX_PROJECT_LOG_UTILS_H
 
 #include <jni.h>
+#include "base/log_defines.h"
+#include "base/log_defines.h"
 
 namespace WeexCore {
 class LogUtils {
  public:
-  static bool RegisterJNIUtils(JNIEnv* env);
-  static void NativeLog(JNIEnv* env, const char* str_array);
+  static bool RegisterJNIUtils(JNIEnv *env);
+  static void NativeLog(JNIEnv *env, const char *str_array);
 };
+
+class LogUtilsWeexCore : public weex::base::LogBase {
+ public:
+  bool log(WeexCore::LogLevel level,
+           const char *tag,
+           const char *file,
+           unsigned long line,
+           const char *log) override;
+};
+
 }  // namespace WeexCore
+
 
 #endif  // WEEX_PROJECT_LOG_UTILS_H

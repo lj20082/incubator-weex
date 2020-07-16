@@ -23,6 +23,8 @@
 #import "WXAssert.h"
 #import "WXMonitor.h"
 #import "WXSDKInstance_performance.h"
+#import "WXSDKError.h"
+#import "WXExceptionUtils.h"
 
 @interface WXTimerTarget : NSObject
 
@@ -164,6 +166,18 @@ WX_EXPORT_METHOD(@selector(clearInterval:))
     
     if (!_timers[callbackID]) {
         _timers[callbackID] = timer;
+        
+        if ([_timers count] > 30) {
+            // remove invalid timers
+            NSMutableArray* invalidTimerIds = [[NSMutableArray alloc] init];
+            for (NSString *cbId in _timers) {
+                NSTimer *timer = _timers[cbId];
+                if (![timer isValid]) {
+                    [invalidTimerIds addObject:cbId];
+                }
+            }
+            [_timers removeObjectsForKeys:invalidTimerIds];
+        }
     }
 }
 

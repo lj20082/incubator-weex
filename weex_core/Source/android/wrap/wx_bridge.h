@@ -25,8 +25,8 @@
 #include <set>
 #include <string>
 #include <vector>
-#include "android/base/jni/scoped_java_ref.h"
-#include "android/wrap/jni_object_wrap.h"
+#include "base/android/jni/scoped_java_ref.h"
+#include "base/android/jni/jni_object_wrap.h"
 #include "base/common.h"
 #include "include/WeexApiHeader.h"
 
@@ -62,8 +62,20 @@ class WXBridge : public JNIObjectWrap {
                   std::vector<std::pair<std::string, std::string>> *margin,
                   std::vector<std::pair<std::string, std::string>> *padding,
                   std::vector<std::pair<std::string, std::string>> *border);
+  int AddChildToRichtext(JNIEnv* env, const char *pageId, const char *nodeType,
+          const char *ref,const char *parentRef,const char *richtextRef,
+          std::map<std::string, std::string> *styles,std::map<std::string, std::string> *attributes);
+  int RemoveChildFromRichtext(JNIEnv* env, const char *pageId, const char *ref, const char *parent_ref,
+                                          const char *richtext_ref);
+  int UpdateRichtextStyle(JNIEnv* env, const char *pageId, const char *ref,
+                                      std::vector<std::pair<std::string, std::string>> *styles, const char *parent_ref,
+                                      const char *richtext_ref);
+  int UpdateRichtextChildAttr(JNIEnv* env, const char *pageId, const char *ref,
+                                          std::vector<std::pair<std::string, std::string>> *attributes,
+                                          const char *parent_ref, const char *richtext_ref);
   int Layout(JNIEnv *env, const char *page_id, const char *ref, int top,
-             int bottom, int left, int right, int height, int width, int index);
+             int bottom, int left, int right, int height, int width,
+             bool isRTL, int index);
   int AddElement(JNIEnv *env, const char *page_id, const char *component_type,
                  const char *ref, int &index, const char *parentRef,
                  std::map<std::string, std::string> *styles,

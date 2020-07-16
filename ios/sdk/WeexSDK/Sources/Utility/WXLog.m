@@ -85,11 +85,8 @@ static BOOL _logToWebSocket = NO;
 
 + (void)setLogLevel:(WeexLogLevel)level
 {
-    if (((WXLog*)[self sharedInstance])->_logLevel != level) {
-        ((WXLog*)[self sharedInstance])->_logLevel = level;
+    ((WXLog*)[self sharedInstance])->_logLevel = level;
 
-        [[WXSDKManager bridgeMgr] resetEnvironment];
-    }
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
     Class propertyClass = NSClassFromString(@"WXTracingViewControllerManager");
@@ -139,9 +136,8 @@ static BOOL _logToWebSocket = NO;
 {
     NSString *flagString;
     switch (flag) {
-        case WXLogFlagError: {
+        case WXLogFlagError:
             flagString = @"error";
-        }
             break;
         case WXLogFlagWarning:
             flagString = @"warn";
@@ -157,7 +153,7 @@ static BOOL _logToWebSocket = NO;
             break;
     }
 
-    NSString *logMessage = [NSString stringWithFormat:@"<Weex>[%@]%s:%ld, %@", flagString, fileName, (unsigned long)line, message];
+    NSString *logMessage = [NSString stringWithFormat:@"<Weex>[%@]%s:%lu, %@", flagString, fileName, (unsigned long)line, message];
 
     if ([_externalLog logLevel] & flag) {
         [_externalLog log:flag message:logMessage];
@@ -206,9 +202,9 @@ static BOOL _logToWebSocket = NO;
 		}
         va_end(args);
 
-        NSArray *messageAry = [NSArray arrayWithObjects:message, nil];
         Class WXLogClass = NSClassFromString(@"WXDebugger");
         if (WXLogClass) {
+            NSArray *messageAry = [NSArray arrayWithObjects:message, nil];
             SEL selector = NSSelectorFromString(@"coutLogWithLevel:arguments:");
             NSMethodSignature *methodSignature = [WXLogClass instanceMethodSignatureForSelector:selector];
             if (methodSignature == nil) {
@@ -232,6 +228,11 @@ static BOOL _logToWebSocket = NO;
 + (void)registerExternalLog:(id<WXLogProtocol>)externalLog
 {
     _externalLog = externalLog;
+}
+
++ (id<WXLogProtocol>)getCurrentExternalLog
+{
+    return _externalLog;
 }
 
 @end

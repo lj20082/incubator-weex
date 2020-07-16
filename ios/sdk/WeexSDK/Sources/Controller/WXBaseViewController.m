@@ -166,6 +166,7 @@
     if ([[NSFileManager defaultManager] fileExistsAtPath:downloadJSPath]) {
         [_instance renderWithURL:[NSURL fileURLWithPath:downloadJSPath] options:@{@"bundleUrl":sourceURL.absoluteString} data:nil];
     }
+<<<<<<< HEAD
     else{
         if ([[NSFileManager defaultManager] fileExistsAtPath:newURL] && ![[NSFileManager defaultManager] fileExistsAtPath:downloadJSFolderPath]) {
             [_instance renderWithURL:[NSURL fileURLWithPath:newURL] options:@{@"bundleUrl":sourceURL.absoluteString} data:nil];
@@ -176,6 +177,9 @@
     }
 #endif
     
+=======
+
+>>>>>>> 25117b668ec4ef9323a97dd59ae27a2270a11c3a
     __weak typeof(self) weakSelf = self;
     
     [self.view addSubview:self.loadingView];
@@ -197,8 +201,14 @@
         [weakSelf _updateInstanceState:WeexInstanceAppear];
         [weakSelf.loadingView removeFromSuperview];
     };
+<<<<<<< HEAD
     /********/
     
+=======
+
+    [_instance renderWithURL:[NSURL URLWithString:newURL] options:@{@"bundleUrl":sourceURL.absoluteString} data:nil];
+
+>>>>>>> 25117b668ec4ef9323a97dd59ae27a2270a11c3a
     if([WXPrerenderManager isTaskReady:[self.sourceURL absoluteString]]){
         WX_MONITOR_INSTANCE_PERF_START(WXPTJSDownload, _instance);
         WX_MONITOR_INSTANCE_PERF_END(WXPTJSDownload, _instance);
