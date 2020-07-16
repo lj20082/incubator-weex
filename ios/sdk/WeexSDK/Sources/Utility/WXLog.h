@@ -19,18 +19,8 @@
 
 #import <Foundation/Foundation.h>
 
-<<<<<<< HEAD
 NS_ASSUME_NONNULL_BEGIN
-
-=======
-<<<<<<< HEAD
->>>>>>> apache-release/0.28
 #define WeexLogLevel WeexLogLevel
-=======
-NS_ASSUME_NONNULL_BEGIN
-
-#define WXLogLevel WeexLogLevel
->>>>>>> 25117b668ec4ef9323a97dd59ae27a2270a11c3a
 
 typedef NS_ENUM(NSInteger, WXLogFlag) {
     WXLogFlagError      = 1 << 0,

@@ -831,11 +831,6 @@ typedef enum : NSUInteger {
         [pageEvent pageDestroy:self.instanceId];
     }
     [[NSNotificationCenter defaultCenter] postNotificationName:WX_INSTANCE_WILL_DESTROY_NOTIFICATION object:nil userInfo:@{@"instanceId":self.instanceId}];
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-    
->>>>>>> apache-release/0.28
     /********/
     NSDictionary *dic = @{@"currentUrl":self.scriptURL.absoluteString?:@""};
     NSString *jsonString = [self convertToJsonStringWithDic:dic];
@@ -843,10 +838,7 @@ typedef enum : NSUInteger {
         [[NSNotificationCenter defaultCenter] postNotificationName:@"customDestroyInstanceNotification" object:nil userInfo:@{@"instanceId":self.instanceId,@"param":@{@"statusCode":@"10001",@"message":@"调用成功",@"content":jsonString,@"type":@1,@"source":@1}}];
     }
     /********/
-    
-    [WXTracingManager destroyTraincgTaskWithInstance:self.instanceId];
-=======
->>>>>>> 25117b668ec4ef9323a97dd59ae27a2270a11c3a
+//    [WXTracingManager destroyTraincgTaskWithInstance:self.instanceId];
 
     [WXPrerenderManager removePrerenderTaskforUrl:[self.scriptURL absoluteString]];
     [WXPrerenderManager destroyTask:self.instanceId];
