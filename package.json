@@ -2,7 +2,7 @@
   "name": "weex",
   "version": "0.12.2",
   "subversion": {
-    "framework": "0.29.0",
+    "framework": "0.29.7",
     "transformer": ">=0.1.5 <0.5"
   },
   "description": "A framework for building Mobile cross-platform UI",
@@ -11,9 +11,9 @@
     "type": "git",
     "url": "git@github.com:apache/incubator-weex.git"
   },
-  "homepage": "http://weex.apache.org/",
+  "homepage": "https://weex.apache.org/",
   "bugs": {
-    "url": "https://issues.apache.org/jira/browse/WEEX/"
+    "url": "https://github.com/apache/incubator-weex/issues"
   },
   "private": true,
   "keywords": [
@@ -83,7 +83,7 @@
     "core-js": "^2.4.0",
     "semver": "^5.1.0",
     "weex-rax-framework": "0.4.20",
-    "weex-vue-framework": "2.5.13-weex.5"
+    "weex-vue-framework": "2.5.16-weex.5"
   },
   "devDependencies": {
     "babel-core": "^6.17.0",
@@ -97,7 +97,7 @@
     "chromedriver": "^2.21.2",
     "cross-spawn": "^4.0.0",
     "css-loader": "^0.26.1",
-    "danger": "^0.18.0",
+    "danger": "^9.0.0",
     "dateformat": "^2.0.0",
     "eslint": "^2.11.1",
     "eslint-plugin-flowtype": "^2.40.1",

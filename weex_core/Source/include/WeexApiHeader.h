@@ -26,9 +26,11 @@
 #include <vector>
 #include <set>
 #include <map>
+#include "WeexApiValue.h"
+
 #ifdef OS_ANDROID
 #include <jni.h>
-#include "IPC/IPCResult.h"
+#include "third_party/IPC/IPCResult.h"
 #endif
 
 namespace WeexCore {
@@ -39,56 +41,18 @@ namespace WeexCore {
 }  // namespace WeexCore
 using namespace WeexCore;
 
-struct WeexString {
-    uint32_t length;
-    uint16_t content[1];
-};
-
-struct WeexByteArray {
-    uint32_t length;
-    char content[1];
-};
-
 class WeexJSResult{
 public:
     std::unique_ptr<char[]> data;
     int length = 0;
+    WeexJSResult() : data(nullptr), length(0) {}
+    WeexJSResult(std::unique_ptr<char[]> d, int l) : data(std::move(d)), length(l) {}
 };
 
 typedef struct InitFrameworkParams {
     WeexByteArray *type;
     WeexByteArray *value;
 } INIT_FRAMEWORK_PARAMS;
-
-
-enum class ParamsType {
-    INT32 = 1,
-    INT64,
-    FLOAT,
-    DOUBLE,
-    JSONSTRING,
-    STRING,
-    BYTEARRAY, /* terminated with zero. */
-    VOID,
-    JSUNDEFINED,
-    END,
-};
-
-
-typedef union ExecJsParamValue {
-    int32_t int32Value;
-    int64_t int64Value;
-    float floatValue;
-    double doubleValue;
-    WeexString *string;
-    WeexByteArray *byteArray;
-} EXEC_JS_PARAM_VALUE;
-
-typedef struct ValueWithType {
-    ParamsType type;
-    EXEC_JS_PARAM_VALUE value;
-} VALUE_WITH_TYPE;
-
 
 #ifdef OS_ANDROID
 
@@ -146,9 +110,20 @@ typedef void (*FuncCallHandlePostMessage)(const char *vimId, const char *data, i
 typedef void
 (*FuncCallDIspatchMessage)(const char *clientId, const char *data, int dataLength, const char *callback, const char *vmId);
 
+typedef std::unique_ptr<WeexJSResult> (*FuncCallDispatchMessageSync)(
+    const char *clientId, const char *data, int dataLength, const char *vmId);
+
 typedef void
 (*FuncOnReceivedResult)(long callback_id, std::unique_ptr<WeexJSResult>& result);
+typedef void
+(*FuncUpdateComponentData)(const char* page_id, const char* cid, const char* json_data);
 
+
+typedef bool
+(*FuncLog)(int level, const char *tag,
+           const char *file,
+           unsigned long line,
+           const char *log);
 
 typedef struct FunctionsExposedByCore {
     FuncSetJSVersion funcSetJSVersion;
@@ -175,7 +150,10 @@ typedef struct FunctionsExposedByCore {
     FuncT3dLinkNative funcT3dLinkNative;
     FuncCallHandlePostMessage funcCallHandlePostMessage;
     FuncCallDIspatchMessage funcCallDIspatchMessage;
+    FuncCallDispatchMessageSync funcCallDispatchMessageSync;
     FuncOnReceivedResult  funcOnReceivedResult;
+    FuncUpdateComponentData funcUpdateComponentData;
+    FuncLog funcLog;
 } FunctionsExposedByCore;
 
 typedef void (*FuncCallSetJSVersion)(const char* version);
@@ -278,13 +256,17 @@ typedef void(*FuncExeJSWithResultId)(const char *instanceId, const char *nameSpa
                                            std::vector<VALUE_WITH_TYPE *> &params, long callback_id);
 
 typedef int (*FuncCreateInstance)(const char *instanceId, const char *func, const char *script, const char *opts,
-                                  const char *initData, const char *extendsApi);
+                                  const char *initData, const char *extendsApi, std::vector<INIT_FRAMEWORK_PARAMS*>& params);
 
-typedef std::unique_ptr<WeexJSResult> (*FuncExeJSOnInstance)(const char *instanceId, const char *script);
+typedef std::unique_ptr<WeexJSResult> (*FuncExeJSOnInstance)(const char *instanceId, const char *script,int type);
 
 typedef int (*FuncDestroyInstance)(const char *instanceId);
 
 typedef int (*FuncUpdateGlobalConfig)(const char *config);
+
+typedef int (*FuncUpdateInitFrameworkParams)(const std::string& key, const std::string& value, const std::string& desc);
+
+typedef void (*FuncSetLogType)(const int logLevel, const bool isPerf);
 
 typedef struct FunctionsExposedByJS {
     FuncInitFramework funcInitFramework;
@@ -302,6 +284,8 @@ typedef struct FunctionsExposedByJS {
     FuncExeJSOnInstance funcExeJSOnInstance;
     FuncDestroyInstance funcDestroyInstance;
     FuncUpdateGlobalConfig funcUpdateGlobalConfig;
+    FuncUpdateInitFrameworkParams funcUpdateInitFrameworkParams;
+    FuncSetLogType funcSetLogType;
 } FunctionsExposedByJS;
 
 

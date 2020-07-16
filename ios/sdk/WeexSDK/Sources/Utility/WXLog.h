@@ -19,9 +19,18 @@
 
 #import <Foundation/Foundation.h>
 
+<<<<<<< HEAD
 NS_ASSUME_NONNULL_BEGIN
 
+=======
+<<<<<<< HEAD
+>>>>>>> apache-release/0.28
 #define WeexLogLevel WeexLogLevel
+=======
+NS_ASSUME_NONNULL_BEGIN
+
+#define WXLogLevel WeexLogLevel
+>>>>>>> 25117b668ec4ef9323a97dd59ae27a2270a11c3a
 
 typedef NS_ENUM(NSInteger, WXLogFlag) {
     WXLogFlagError      = 1 << 0,
@@ -105,6 +114,8 @@ typedef NS_ENUM(NSUInteger, WeexLogLevel){
 
 + (void)registerExternalLog:(id<WXLogProtocol>)externalLog;
 
++ (id<WXLogProtocol>)getCurrentExternalLog;
+
 @end
 
 #define WX_FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
@@ -125,3 +136,5 @@ extern void _WXLogObjectsImpl(NSString *severity, NSArray *arguments);
 #define WXLogInfo(format, ...)          WX_LOG(WXLogFlagInfo, format, ##__VA_ARGS__)
 #define WXLogWarning(format, ...)       WX_LOG(WXLogFlagWarning, format ,##__VA_ARGS__)
 #define WXLogError(format, ...)         WX_LOG(WXLogFlagError, format, ##__VA_ARGS__)
+
+NS_ASSUME_NONNULL_END

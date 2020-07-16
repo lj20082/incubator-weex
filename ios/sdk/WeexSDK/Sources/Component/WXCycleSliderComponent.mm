@@ -58,6 +58,7 @@ typedef NS_ENUM(NSInteger, Direction) {
 @property (nonatomic, assign) CGRect currentItemFrame;
 @property (nonatomic, assign) CGRect nextItemFrame;
 @property (nonatomic, assign) BOOL infinite;
+@property (nonatomic, assign) BOOL forbidSlideAnimation;
 
 - (void)insertItemView:(UIView *)view atIndex:(NSInteger)index;
 - (void)removeItemView:(UIView *)view;
@@ -73,6 +74,9 @@ typedef NS_ENUM(NSInteger, Direction) {
         _currentIndex = 0;
         _itemViews = [[NSMutableArray alloc] init];
         _scrollView = [[WXRecycleSliderScrollView alloc] init];
+        if (@available(iOS 11.0, *)) {
+            _scrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+        }
         _scrollView.backgroundColor = [UIColor clearColor];
         _scrollView.delegate = self;
         _scrollView.showsHorizontalScrollIndicator = NO;
@@ -165,7 +169,7 @@ typedef NS_ENUM(NSInteger, Direction) {
         }
         [self resetAllViewsFrame];
     } else {
-        [_scrollView setContentOffset:CGPointMake(_currentIndex * self.width, 0) animated:YES];
+        [_scrollView setContentOffset:CGPointMake(_currentIndex * self.width, 0) animated:!_forbidSlideAnimation];
     }
     [self resetIndicatorPoint];
     if (self.delegate && [self.delegate respondsToSelector:@selector(recycleSliderView:didScrollToItemAtIndex:)]) {
@@ -245,12 +249,12 @@ typedef NS_ENUM(NSInteger, Direction) {
 - (void)nextPage {
     if (_itemViews.count > 1) {
         if (_infinite) {
-            [self.scrollView setContentOffset:CGPointMake(self.width * 2, 0) animated:YES];
+            [self.scrollView setContentOffset:CGPointMake(self.width * 2, 0) animated:!_forbidSlideAnimation];
         } else {
             // the currentindex will be set at the end of animation
             NSInteger nextIndex = self.currentIndex + 1;
             if(nextIndex < _itemViews.count) {
-                [self.scrollView setContentOffset:CGPointMake(nextIndex * self.width, 0) animated:YES];
+                [self.scrollView setContentOffset:CGPointMake(nextIndex * self.width, 0) animated:!_forbidSlideAnimation];
             }
         }
     }
@@ -360,19 +364,31 @@ typedef NS_ENUM(NSInteger, Direction) {
 }
 
 - (void)scrollViewDidEndScrollingAnimation:(UIScrollView *)scrollView {
+    /* In this case, we forbid animation temporarily so that
+     setContentOffset in setCurrentIndex won't cause endless loop
+     on some devices.
+     We have to use _forbidSlideAnimation in setCurrentIndex because
+     sometimes JS will trigger the slider to slide to some posistion
+     with animation.
+     */
+    BOOL oldValue = _forbidSlideAnimation;
+    _forbidSlideAnimation = YES;
+    
     if (_infinite) {
         [self resetScrollView];
     } else {
         NSInteger index = _scrollView.contentOffset.x / self.width;
         [self setCurrentIndex:index];
     }
+        
+    _forbidSlideAnimation = oldValue;
 }
 
 @end
 
 @interface WXCycleSliderComponent () <WXRecycleSliderViewDelegate,WXIndicatorComponentDelegate>
 
-@property (nonatomic, strong) WXRecycleSliderView *recycleSliderView;
+@property (nonatomic, weak) WXRecycleSliderView *recycleSliderView;
 @property (nonatomic, strong) NSTimer *autoTimer;
 @property (nonatomic, assign) NSInteger currentIndex;
 @property (nonatomic, assign) BOOL  autoPlay;
@@ -388,6 +404,7 @@ typedef NS_ENUM(NSInteger, Direction) {
 @property (nonatomic, strong) NSMutableArray *childrenView;
 @property (nonatomic, assign) BOOL scrollable;
 @property (nonatomic, assign) BOOL infinite;
+@property (nonatomic, assign) BOOL forbidSlideAnimation;
 
 @end
 
@@ -423,6 +440,9 @@ typedef NS_ENUM(NSInteger, Direction) {
             _offsetXAccuracy = [WXConvert CGFloat:attributes[@"offsetXAccuracy"]];
         }
         _infinite = attributes[@"infinite"] ? [WXConvert BOOL:attributes[@"infinite"]] : YES;
+        
+        _forbidSlideAnimation = attributes[@"forbidSlideAnimation"] ? [WXConvert BOOL:attributes[@"forbidSlideAnimation"]] : NO;
+        
         self.flexCssNode->setFlexDirection(WeexCore::kFlexDirectionRow,NO);
     }
     return self;
@@ -443,6 +463,7 @@ typedef NS_ENUM(NSInteger, Direction) {
     _recycleSliderView.exclusiveTouch = YES;
     _recycleSliderView.scrollView.scrollEnabled = _scrollable;
     _recycleSliderView.infinite = _infinite;
+    _recycleSliderView.forbidSlideAnimation = _forbidSlideAnimation;
     UIAccessibilityTraits traits = UIAccessibilityTraitAdjustable;
     if (_autoPlay) {
         traits |= UIAccessibilityTraitUpdatesFrequently;
@@ -455,7 +476,40 @@ typedef NS_ENUM(NSInteger, Direction) {
 
 - (void)layoutDidFinish
 {
-    _recycleSliderView.currentIndex = _index;
+    _recycleSliderView.currentIndex = self.currentIndex;
+}
+
+- (void)_buildViewHierarchyLazily {
+    [super _buildViewHierarchyLazily];
+    _recycleSliderView.currentIndex = self.currentIndex;
+}
+
+- (void)adjustForRTL
+{
+    if (![WXUtility enableRTLLayoutDirection]) return;
+    
+    // this is scroll rtl solution.
+    // scroll layout not use direction, use self tranform
+    if (self.view && self.isDirectionRTL) {
+        WXRecycleSliderView *slider = (WXRecycleSliderView *)self.view;
+        CATransform3D transform = CATransform3DScale(CATransform3DIdentity, -1, 1, 1);
+        slider.scrollView.layer.transform = transform ;
+    } else {
+        WXRecycleSliderView *slider = (WXRecycleSliderView *)self.view;
+        slider.scrollView.layer.transform = CATransform3DIdentity ;
+    }
+
+}
+
+- (void)_adjustForRTL {
+    if (![WXUtility enableRTLLayoutDirection]) return;
+    
+    [super _adjustForRTL];
+    [self adjustForRTL];
+}
+
+- (BOOL)shouldTransformSubviewsWhenRTL {
+    return YES;
 }
 
 - (void)viewDidUnload
@@ -533,6 +587,11 @@ typedef NS_ENUM(NSInteger, Direction) {
 
 - (void)updateAttributes:(NSDictionary *)attributes
 {
+    if (attributes[@"forbidSlideAnimation"]) {
+        _forbidSlideAnimation = [WXConvert BOOL:attributes[@"forbidSlideAnimation"]];
+        _recycleSliderView.forbidSlideAnimation = _forbidSlideAnimation;
+    }
+    
     if (attributes[@"autoPlay"]) {
         _autoPlay = [WXConvert BOOL:attributes[@"autoPlay"]];
         if (_autoPlay) {
@@ -599,7 +658,7 @@ typedef NS_ENUM(NSInteger, Direction) {
 
 -(void)setIndicatorView:(WXIndicatorView *)indicatorView
 {
-    NSAssert(_recycleSliderView, @"");
+    NSAssert(_recycleSliderView, @"");//!OCLint
     [_recycleSliderView setIndicator:indicatorView];
 }
 

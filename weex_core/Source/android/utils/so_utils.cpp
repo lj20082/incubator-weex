@@ -23,11 +23,12 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <dlfcn.h>
-#include "android/base/log_utils.h"
+#include "base/android/log_utils.h"
 
 namespace WeexCore {
     char * SoUtils::g_cache_dir = nullptr;
     char * SoUtils::g_jss_so_path = nullptr;
+    char * SoUtils::g_jsb_so_path = nullptr;
     char * SoUtils::g_jsc_so_path = nullptr;
     char * SoUtils::g_crash_file_path = nullptr;
     char * SoUtils::g_jss_icu_path = nullptr;
@@ -178,7 +179,7 @@ namespace WeexCore {
             return soPath;
         } else {
             const char *error = soPath.c_str();
-            LOGE("so path: %s is not exsist, use full package lib", error);
+            LOGE("so path: %s is not exist, use full package lib", error);
 //            executablePath = s_cacheDir;
             executablePath = SoUtils::cache_dir();
             std::string lib = "/cache";
@@ -188,7 +189,7 @@ namespace WeexCore {
             soPath = executablePath + "/" + SoUtils::jss_so_name();
 //            soPath = executablePath + "/" + g_jssSoName;
             if (access(soPath.c_str(), 00) != 0) {
-                LOGE("so path: %s is not exsist", soPath.c_str());
+                LOGE("so path: %s is not exist", soPath.c_str());
                 g_exception_handler("-1004", error);
                 //return false;
                 //use libweexjss.so directly

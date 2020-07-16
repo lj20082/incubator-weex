@@ -1,110 +1,148 @@
-# How to Contribute
+# Contributing to Weex
+Weex community respects all kinds of contributing, including but not limited to code, documentation, mailing list.
+## Table of Content
+* [Code of Conduct](#code-of-conduct)
+* [Mailing List](#mailing-list)
+* [Ask or Answer Questions](#mailing-list)
+* [Development Process](#development-process)
+* [Contribute Code or document](#contribute-code-or-document)
+    * [Contribute Documentation](contribute-documentation)
+    * [Contribute Code](#contribute-code)
+* [Members and Governance Model](#members-and-governance-model)
 
-Welcome to create [pull requests](https://github.com/apache/incubator-weex/compare) or join in our [mailing list](http://mail-archives.apache.org/mod_mbox/incubator-weex-dev/) for the bug fix, doc, example, suggestion and anything.
+# Code of Conduct
+To make an open and friendly community, Weex community adopt [Contributor Covenant](./CODE_OF_CONDUCT.md) as the code of conduct.
 
-## Join in Weex Mailing List
+# Mailing List
+> If it didn't happen on a mailing list, it didn't happen.
 
-In Weex community all discussions happen on mailing list.
+In Weex community, feature requests, discussions and decisions happen on the mailing list, which is open to the whole world. Ref our [website](https://weex.apache.org/guide/contribute/how-to-contribute.html#mailing-list) to see more.
 
-Just send an email to `dev-subscribe@weex.incubator.apache.org` and follow the instructions to subscribe Weex dev mailing list. Then you will receive discussions and community messages with your personal email. You can also reply back or publish your opinions freely to join the community discussion.
+# Ask or Answer Questions
+Weex Community [Github Issue](https://github.com/apache/incubator-weex/issues) to report and track bugs 。The more information provided in a Github issue, the sooner it get solved.
 
-You can also access the mail archives through the [web portal](http://mail-archives.apache.org/mod_mbox/incubator-weex-dev/).
+*Tip*:
+> * Avoid duplicated: Always search on Github before you fire a new one.
+> * Always run with the latest version before you fire a bug
+> * Only report one bug in one Github Issue.
 
-*To unsubscribe the mailing list: send an email to `dev-unsubscribe@weex.incubator.apache.org` and follow the instructions.*
+## Format of Github issue
+Please use the [Bug Report](https://github.com/apache/incubator-weex/issues/new/choose) template when firing a bug. All the information needed to solve a bug is listed in the Bug report template , please fill it out as much as you can. **The more information provided in a Github issue, the sooner it get solved.**
 
-Besides Weex dev mailing list channel, there are `commits` and `user ` channels available for subscription. Check them out [here](http://mail-archives.apache.org/mod_mbox/#weex.incubator).
+*Tip*:
+> Report bug with fact and expected behavior, not complaint or emotional words.
 
-## Branch Management
+## Be patient
+Compared to the amount of issues, Weex community may not response to your issues in time, please be patient.
 
-### Principles
+*Tip*:
+> If your Github issue doesn't get any response over a week, you can ask developers through [weex mailing list](https://weex.apache.org/guide/contribute/how-to-contribute.html#mailing-list).
 
-* Use `rebase` instead of `merge` when merging PRs when you work on a single branch, in order to keep it simple and clean for review.
-* Only use `merge` when publishing beta and Apache release, or merging back changes on temporary branches back to `master` branch.
-* **DO NOT USE FEATURE BRANCH** if it is really needed.
+# Development Process
+Most of the development process is described in [confluence](https://cwiki.apache.org/confluence/x/eJBTBw), which services the contributors of Weex and is transparent to all users.
 
-![Branch Management](https://user-images.githubusercontent.com/700736/42321369-4587dc10-808b-11e8-9d8c-6356fde71244.png)
+* [Release Plan](https://github.com/apache/incubator-weex/milestones): All feature, bugfix, issue-solved are associated with a certain milestone since Weex 0.27. As every Weex release needs approval from PPMC and IPMC, the due date of milestone is just an estimation of release date, not accuracy schedule.
+* [Release Procedure](https://cwiki.apache.org/confluence/x/_I5TBw)
+* [Major feature](https://github.com/apache/incubator-weex/projects)
+* [System Design](https://cwiki.apache.org/confluence/x/XYxTBw)
+* [Road Map](https://cwiki.apache.org/confluence/x/fJBTBw)
 
-### Permanent Branches
+# Contribute Code or document
+In Weex community, **Documentation is as important as code**, and Weex community respects all the contribution of documentation or code.
 
-0. `master` branch
-    * `master` is the development branch, which tracks the bleeding-edge daily development works and is unstable from time to time.
-1. `beta` branch
-    * It is the beta publish branch, we take is as the project's `Beta Release Channel`, each commit on this branch tracks a beta version, with a `beta release tag` attached to it.
-2. `release` branch
-    * The `release` is the Apache release publish branch, we take it as the project's `Stable Release Channel`, each commit on it tracks a release version, with a `release tag` attached to it.
+*Tip*:
+> Weex adopts [Apache License 2.0](https://choosealicense.com/licenses/apache-2.0/) as its open source license. Make sure your contribution obeys the requirement of Apache License 2.0.
 
-### Temporary Branches
+## Contribute documentation
+Documentation with good quality is a great help to developers. If there is a powerful API that is not easy to use, it becomes useless. So, we welcome contributions to help documentation of Weex become precise and easy to read.
 
-0. beta candidates branches
-    * A beta candidate branch tracks a beta release process.
-    * A beta version will be released weekly, usually a beta branch will be branched off from `master` branch every Thursday evening to start a beta release, bug fixes for the release goes to this branch, and it will be released on the next Monday morning, after merging into the `beta` branch, a beta release tag will be attached to the specific commit on `beta` branch to identify a beta release.
-    * The branch name should be `beta-0.xx.x`, a beta release can only grow the last digit of the version number as the beta version number.
-    * The tag name for a beta release should be `beta-0.xx.x`.
-    * This beta candidate branch will be removed soon after it is merged into the `beta` branch.
-1. release candidates branches
-    * A release candidate branch tracks an Apache release process.
-    * A release candidate branch will be branched off from the `beta` branch when we propose an Apache release, the frequency would be per month. We will follow the release process on this branch, including signoff, RC review, etc., after the Apache release vote, this branch will merge into `release` branch and a release tag will be attached to the merge commit to identifying an Apache release version.
-    * The branch name should be `rc-0.xx.0`, and it grows the middle digits as a release number.
-    * The release tag name for an Apache release should be `v0.xx.0`.
-    * This release candidate branch will be removed soon after it is merged into the `release` branch.
-2. feature branches
-    * Usually, it is not recommended to open a feature branch unless you are working on a breaking change feature which affects master branch a lot; or you are working on something for the next release, which is not supposed to be published with this release version.
-    * A feature branch can only be branched off from the `master` branch, and can only be merged back to `master` branch when complete. It is not allowed to start a beta or Apache release from feature branch. It should be deleted soon after it is merged back to `master`.
-    * Start a discussion in the mailing list and get approval from PMC members before you want to branch off a feature branch.
+You can contribute to a document through the following ways:
+* Click **Edit this page** on the bottom of website, and you will be navigated to a new Github PR.
 
-## Commit Log
+## Contribute code
+### Before Coding
+#### Use master branch
+The development of Weex is on master branch, you should write your code based on master branch.
 
-```
-[{module|issueID}] {title}
+#### Check License
+Weex adopts [Apache License 2.0](https://choosealicense.com/licenses/apache-2.0/) as its open source license. Make sure your potential contribution obeys the requirement of Apache License 2.0.
 
-{summary}
-```
+#### Bug or Feature ?
+* If you are going to fix a bug of Weex, check whether it already exists in [Github Issue](https://github.com/apache/incubator-weex/issues). If it exists, make sure to write down the link of the corresponding Github issue in the PR you are going to create.
+* If you are going to add a feature for weex, reference the following recommend procedure:
+    1. Writing a email to [mailing list](https://weex.apache.org/guide/contribute/how-to-contribute.html#mailing-list) to talk about what you'd like to do.
+    1. Write the corresponding [document](#contribute-documentation)
 
-* `{module|issueID}`
-    * Use a module name as a heads-up for the major changes in this commit.
-    * Or use an Apache JIRA issue ID: `[Weex-xxx]` to track the changes for the issue.
-    * The available module name includes but not limited to android, ios, jsfm, html5, component, doc, example, test, etc.
-* `{title}`
-    * A summary for your commit, no more than 80 characters including the module or issue ID.
-* `{summary}`
-    * Explain a little bit more about what you have changed in your commit, how does it design, potential impact on other modules, or what is your next move. More detailed you explain, more easily the codebase gets maintained.
+### Coding
+1. [Fork](https://help.github.com/articles/fork-a-repo/) the Github repository at [https://github.com/apache/incubator-weex](https://github.com/apache/incubator-weex). 
+1. Clone the forked repository and create a new branch from `master` to push your commits to.
+1. Develop your feature or bug fix in your new branch. Make sure your code meets the [style guidelines](#code-style-guidelines).
+1. Add the **License** below to the top of any new file(s) you've added.
+   
+        /*
+        * Licensed to the Apache Software Foundation (ASF) under one
+        * or more contributor license agreements.  See the NOTICE file
+        * distributed with this work for additional information
+        * regarding copyright ownership.  The ASF licenses this file
+        * to you under the Apache License, Version 2.0 (the
+        * "License"); you may not use this file except in compliance
+        * with the License.  You may obtain a copy of the License at
+        *
+        *   http://www.apache.org/licenses/LICENSE-2.0
+        *
+        * Unless required by applicable law or agreed to in writing,
+        * software distributed under the License is distributed on an
+        * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        * KIND, either express or implied.  See the License for the
+        * specific language governing permissions and limitations
+        * under the License.
+        */
+   
+1. Commit all the changes to your branch.
 
-A good commit log should look like this:
+*Tip*:
+> If you are writing Java or C++ with Android Studio, **License** will be added to the head of the file automatically.
 
-```
-commit e110f0a32b6cfe6d0adb006a931f6d7fd9de7c01
-Author: Adam Feng <cxfeng1@gmail.com>
-Date:   Mon Jun 11 18:34:26 2018 +0800
+#### Code Style Guidelines 
 
-  [Script] release preparing:
+##### Objective-C
 
-  1. add missing modules in package.json
-  2. move html5 folder to runtime folder in release_file.rules
-  3. modify js-framework path in build_from_source.sh
-  4. add NDK environment setup to HOW-TO-BUILD.md
-```
-
-## Pull Request
-
-You can [create pull requests](https://github.com/apache/incubator-weex/compare) in GitHub.
-
-1. First, we suggest you have some discussion with the community (commonly in our mailing list) before you code.
-2. Fork repo from [https://github.com/apache/incubator-weex/](https://github.com/apache/incubator-weex/)
-3. Finish the job you want to do.
-4. Create a pull request.
-
-## Code Style Guide
-
-### Objective-C
-
-* Tabs for indentation (not space)
+* Tabs should be used for indentation. Please do not use spaces.
 * `*` operator goes with the variable name (e.g. Type *variable;)
-* Function definitions: place each brace on its own line.
-* Other braces: place the open brace on the line preceding the code block; place the close brace on its own line.
+* For function definitions, place each brace on its own line.
+* For all the other braces, place the open brace on the line preceding the code block and place the close brace on its own line.
 * Use `#pragma marks` to categorize methods into functional groupings and protocol implementations
 * Follow other guidelines on [GitHub Objective-C Style Guide](https://github.com/github/objective-c-style-guide)
 
-### Java & Android
-
+##### Java & Android
 * Use [Google Java Style](https://google.github.io/styleguide/javaguide.html) as basic guidelines of java code.
 * Follow [AOSP Code Style](https://source.android.com/source/code-style.html) for rest of android related code style.
+
+##### C & C++
+* Use [Google C++ Style ](https://google.github.io/styleguide/cppguide.html)  as basic guidelines of C++ code
+* Weex defines [a subset of the Google C++ development specification](https://github.com/jianhan-he/C-Style-Guide/blob/master/C%2B%2B_Style_Guide_en.md) that covers some of the major C++ scenario usage specifications.
+
+### Publish your Change
+[Open a pull request](https://help.github.com/articles/using-pull-requests/) against the `master` branch of `apache/incubator-weex`. Make sure following guidelines are considered when creating a pull request.
+
+1. One PR should solve only one problem.
+1. The PR title should be the form of `[COMPONENT] Summary`:
+    * `COMPONENT` is one of the mentioned PR categories (android, iOS, JsFm, web, test, etc..). 
+    * `Summary` should be a brief description of your change within one sentence.
+1. Content description of PR
+    * If the PR is about fixing a bug *excluding crash*, a [demo](http://editor.weex.io/) is necessary in code's description.
+    * If the PR is about adding a new feature, another [PR for documentation](#contribute-documentation) is necessary in codes' PR description.
+    * *Optional* If the PR fixes an existing Github issue, you may add the link to the corresponding issue in the PR.
+
+There will be a static check program when you submit a PR,and the following rules will be checked:
+1. Check if your PR is submitted to master branch, if not, you will failed.
+1. Check if your PR is bounded with a milestone, if not, you will receive a warning message.
+1. Check if your PR description contains keywords `Documentation` and it's corresponding http links. if not, you will receive a warning message.
+1. Check if your PR description contains keywords `Demo` and it's corresponding http links. if not, you will receive a warning message.
+1. Check if your PR modify the changelog.md, if not,you will receive a warning message.
+
+*Tip*:
+> Reviewing PR may take a great deal of time, please be patient. If your PR doesn't get response over 96 hours, you might send an email to [mailing list](https://weex.apache.org/guide/contribute/how-to-contribute.html#mailing-list) to ask the progress.
+
+# Members and Governance Model
+You can find committers, PPMCs and governance model of Weex from [confluence](https://cwiki.apache.org/confluence/x/bFoyBw).

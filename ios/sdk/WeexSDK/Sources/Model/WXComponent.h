@@ -17,14 +17,8 @@
  * under the License.
  */
 
-/**
- *  def : use weex_flex_engin
- *  ndef: use yoga
- **/
-
-
 #import <Foundation/Foundation.h>
-#import "WXType.h"
+#import <WeexSDK/WXType.h>
 
 @class WXSDKInstance;
 
@@ -32,6 +26,11 @@ typedef enum : NSUInteger {
     WXDisplayTypeNone,
     WXDisplayTypeBlock
 } WXDisplayType;
+
+typedef enum : NSUInteger {
+    WXComponentViewCreatedCallback,
+    WXComponentUpdateStylesCallback
+} WXComponentCallbackType;
 
 /**
  * @abstract the component callback , result can be string or dictionary.
@@ -174,6 +173,16 @@ NS_ASSUME_NONNULL_BEGIN
  *
  */
 - (nullable CGSize (^)(CGSize constrainedSize))measureBlock;
+
+/**
+ *  The callback of the component
+ *
+ *  When the callbackType is WXComponentViewCreatedCallback, the result type is UIView.
+ *  When the callbackType is WXComponentUpdateStylesCallback, the result type is NSDictionary.
+ *
+ *  @return A block that takes component, callbackType and a result.
+ **/
+@property (nonatomic, copy) void (^componentCallback)(WXComponent *component, WXComponentCallbackType callbackType, id _Nullable result);
 
 /**
  * @abstract Called on main thread when the component has just laid out.
@@ -428,6 +437,15 @@ NS_ASSUME_NONNULL_BEGIN
  */
 - (void)updateBindingData:(NSDictionary *)data;
 
+///--------------------------------------
+/// @name Heron
+///--------------------------------------
+
+/**
+ * @abstract Unload native view of embeded component in Heron mode.
+ */
+- (void)unloadNativeView;
+
 @end
 
 @interface WXComponent (Deprecated)
@@ -468,3 +486,4 @@ typedef void(^WXDisplayCompletionBlock)(CALayer *layer, BOOL finished);
 @end
 
 NS_ASSUME_NONNULL_END
+

@@ -25,6 +25,7 @@
 #include <string>
 #include <vector>
 #include "base/common.h"
+#include "base/closure.h"
 #include "include/WeexApiHeader.h"
 
 namespace WeexCore {
@@ -63,6 +64,14 @@ class PlatformBridge {
                            const std::string& render_ref) = 0;
     virtual void SetViewPortWidth(const std::string& instance_id,
                                   float width) = 0;
+                                  
+    virtual void SetPageRenderType(const std::string &pageId, const std::string& renderType)=0;
+    virtual void RemovePageRenderType(const std::string &pageId)=0;
+
+    virtual void SetPageArgument(const std::string &pageId, const std::string& key, const std::string& value) = 0;
+    virtual void SetDeviceDisplayOfPage(const std::string &instance_id, float width, float height /* unused now */) = 0;
+    virtual void SetDeviceDisplay(const std::string &instance_id, float width, float height, float scale) = 0;
+
     virtual void SetPageDirty(const std::string& instance_id) = 0;
     virtual void ForceLayout(const std::string& instance_id) = 0;
     virtual bool NotifyLayout(const std::string& instance_id) = 0;
@@ -70,6 +79,7 @@ class PlatformBridge {
         const std::string& instance_id) = 0;
     virtual std::vector<int64_t> GetRenderFinishTime(
         const std::string& instance_id) = 0;
+    virtual bool RelayoutUsingRawCssStyles(const std::string& instance_id) = 0; // relayout whole page using raw css styles
     virtual void SetRenderContainerWrapContent(const std::string& instance_id,
                                                bool wrap) = 0;
     virtual void BindMeasurementToRenderObject(long ptr) = 0;
@@ -119,12 +129,19 @@ class PlatformBridge {
                                     long callback_id) = 0;
     virtual int CreateInstance(const char* instanceId, const char* func,
                                const char* script, int script_length, const char* opts,
-                               const char* initData, const char* extendsApi,
+                               const char* initData, const char* extendsApi, std::vector<INIT_FRAMEWORK_PARAMS*>& params,
                                const char* render_strategy) = 0;
     virtual std::unique_ptr<WeexJSResult> ExecJSOnInstance(const char* instanceId,
-                                         const char* script) = 0;
+                                         const char* script,int type) = 0;
     virtual int DestroyInstance(const char* instanceId) = 0;
+
     virtual int UpdateGlobalConfig(const char* config) = 0;
+
+    virtual int UpdateInitFrameworkParams(const std::string& key, const std::string& value, const std::string& desc) = 0;
+
+    virtual void SetLogType(const int logType, const bool isPerf) = 0;
+
+    virtual double GetLayoutTime(const char* instanceId) const {return 0;}
 
     inline PlatformBridge* bridge() { return bridge_; }
 
@@ -169,6 +186,11 @@ class PlatformBridge {
                                      const char* method, const char* arguments,
                                      int arguments_length, const char* options,
                                      int options_length) = 0;
+#if OS_IOS
+    virtual std::unique_ptr<ValueWithType> RegisterPluginModule(const char *name, const char *class_name, const char *version) = 0;
+    virtual std::unique_ptr<ValueWithType> RegisterPluginComponent(const char *name, const char *class_name, const char *version) = 0;
+    virtual void PostTaskOnComponentThread(const weex::base::Closure closure) = 0;
+#endif
     virtual void SetTimeout(const char* callback_id, const char* time) = 0;
     virtual void NativeLog(const char* str_array) = 0;
     virtual int UpdateFinish(const char* page_id, const char* task, int taskLen,
@@ -197,9 +219,15 @@ class PlatformBridge {
                            const WXCorePadding& paddings,
                            const WXCoreBorderWidth& borders,
                            bool willLayout = true) = 0;
+
+      virtual int AddChildToRichtext(const char* pageId, const char *nodeType, const char* ref,
+                                       const char* parentRef, const char* richtextRef,
+                                       std::map<std::string, std::string> *styles,
+                                       std::map<std::string, std::string> *attributes) = 0;
+
     virtual int Layout(const char* page_id, const char* ref, float top,
                        float bottom, float left, float right, float height,
-                       float width, int index) = 0;
+                       float width, bool isRTL, int index) = 0;
 
     virtual int UpdateStyle(
         const char* pageId, const char* ref,
@@ -207,15 +235,26 @@ class PlatformBridge {
         std::vector<std::pair<std::string, std::string>>* margin,
         std::vector<std::pair<std::string, std::string>>* padding,
         std::vector<std::pair<std::string, std::string>>* border) = 0;
+
     virtual int UpdateAttr(
         const char* pageId, const char* ref,
         std::vector<std::pair<std::string, std::string>>* attrs) = 0;
+
+    virtual int UpdateRichtextChildAttr(
+                                          const char* pageId, const char* ref,
+                                          std::vector<std::pair<std::string, std::string>>* attrs, const char* parent_ref, const char* richtext_ref) = 0;
+
+    virtual int UpdateRichtextStyle(const char* pageId, const char* ref,
+                                      std::vector<std::pair<std::string, std::string>> *style,
+                                      const char* parent_ref, const char* richtext_ref) = 0;
 
     virtual int CreateFinish(const char* pageId) = 0;
 
     virtual int RenderSuccess(const char* pageId) = 0;
 
     virtual int RemoveElement(const char* pageId, const char* ref) = 0;
+
+    virtual int RemoveChildFromRichtext(const char* pageId, const char* ref, const char* parent_ref, const char* richtext_ref) = 0;
 
     virtual int MoveElement(const char* pageId, const char* ref,
                             const char* parentRef, int index) = 0;
@@ -226,8 +265,12 @@ class PlatformBridge {
         const char* pageId, const char* ref,
         std::vector<std::pair<std::string, std::string>>* style) = 0;
     virtual void PostMessage(const char* vm_id, const char* data, int dataLength) = 0;
-    virtual void DispatchMessage(const char* client_id,
-                                 const char* data, int dataLength, const char* callback, const char* vm_id) = 0;
+    virtual void DispatchMessage(const char* client_id, const char* data,
+                                 int dataLength, const char* callback,
+                                 const char* vm_id) = 0;
+    virtual std::unique_ptr<WeexJSResult> DispatchMessageSync(
+        const char* client_id, const char* data, int dataLength,
+        const char* vm_id) = 0;
     virtual void OnReceivedResult(long callback_id,
                                   std::unique_ptr<WeexJSResult>& result) = 0;
 

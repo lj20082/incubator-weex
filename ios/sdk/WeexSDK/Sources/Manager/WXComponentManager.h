@@ -19,7 +19,8 @@
 
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
-#import "WXDisplayLinkManager.h"
+
+NS_ASSUME_NONNULL_BEGIN
 
 @class WXBridgeMethod;
 @class WXSDKInstance;
@@ -36,7 +37,7 @@ void WXPerformBlockSyncOnComponentThread(void (^block)(void));
 }
 #endif
 
-@interface WXComponentManager : NSObject <WXDisplayLinkClient>
+@interface WXComponentManager : NSObject
 
 @property (nonatomic, readonly, weak) WXSDKInstance *weexInstance;
 @property (nonatomic, readonly, assign) BOOL isValid;
@@ -123,6 +124,11 @@ void WXPerformBlockSyncOnComponentThread(void (^block)(void));
  */
 - (void)addComponent:(WXComponent *)component toIndexDictForRef:(NSString *)ref;
 
+/**
+ * @abstract remove an existing component to references look-up map
+ */
+- (void)removeComponentForRef:(NSString *)ref;
+
 ///--------------------------------------
 /// @name Updating
 ///--------------------------------------
@@ -155,7 +161,7 @@ void WXPerformBlockSyncOnComponentThread(void (^block)(void));
 /**
  * @abstract layout a component with frame output by weex core layout engine
  **/
-- (void)layoutComponent:(WXComponent*)component frame:(CGRect)frame innerMainSize:(CGFloat)innerMainSize;
+- (void)layoutComponent:(WXComponent*)component frame:(CGRect)frame isRTL:(BOOL)isRTL innerMainSize:(CGFloat)innerMainSize;
 
 /**
  * @abstract layout a component on platform side
@@ -262,4 +268,20 @@ void WXPerformBlockSyncOnComponentThread(void (^block)(void));
  */
 - (void)enumerateComponentsUsingBlock:(void (^)(WXComponent *, BOOL *stop))block;
 
+#pragma mark batch mark
+
+/**
+ a start native batch tag for a group of UI operations, company with performBatchEnd
+ @see performBatchEnd
+ */
+- (void)performBatchBegin;
+
+/**
+ an end native batch tag for a group of UI operations, company with performBatchBegin
+ @see performBatchBegin
+ */
+- (void)performBatchEnd;
+
 @end
+
+NS_ASSUME_NONNULL_END

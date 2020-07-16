@@ -21,12 +21,14 @@
 #ifndef WEEXCORE_FLEXLAYOUT_WXCORELAYOUTNODE_H
 #define WEEXCORE_FLEXLAYOUT_WXCORELAYOUTNODE_H
 
-#include "style.h"
-#include "flex_enum.h"
+#include <string.h>
+#include <math.h>
 #include <vector>
 #include <iostream>
 #include <string>
 #include <algorithm>
+#include "style.h"
+#include "flex_enum.h"
 
 namespace WeexCore {
 
@@ -70,9 +72,10 @@ namespace WeexCore {
   };
 
   /**
-   * layout-result：layout-height、layout-width、position（left、right、top、bottom）
+   * layout-result：layout-height、layout-width、position（left、right、top、bottom）、direction
    */
   struct WXCorelayoutResult {
+    WXCoreDirection mLayoutDirection;
     WXCoreSize mLayoutSize;
     WXCorePosition mLayoutPosition;
 
@@ -81,8 +84,9 @@ namespace WeexCore {
     }
 
     inline void reset() {
-      mLayoutSize.reset();
-      mLayoutPosition.reset();
+        mLayoutSize.reset();
+        mLayoutPosition.reset();
+        mLayoutDirection = kDirectionInherit;
     }
   };
 
@@ -149,7 +153,6 @@ namespace WeexCore {
         mLayoutResult = new WXCorelayoutResult();
       }
 
-
       virtual ~WXCoreLayoutNode() {
         mIsDestroy = true;
         mHasNewLayout = true;
@@ -180,6 +183,9 @@ namespace WeexCore {
         }
       }
 
+      const std::vector<WXCoreLayoutNode *>& get_child_list() const {return mChildList;}
+
+      void removeAllChildren() {mChildList.clear();}
   private:
 
     /**
@@ -255,20 +261,22 @@ namespace WeexCore {
     inline void setContext(void * const context) {
       this->context = context;
     }
-
+      
     inline void copyStyle(WXCoreLayoutNode *srcNode) {
-      if (memcmp(mCssStyle, srcNode->mCssStyle, sizeof(WXCoreCSSStyle)) != 0) {
+      if (srcNode != nullptr && memcmp(mCssStyle, srcNode->mCssStyle, sizeof(WXCoreCSSStyle)) != 0) {
         memcpy(mCssStyle, srcNode->mCssStyle, sizeof(WXCoreCSSStyle));
         markDirty();
       }
     }
-
+      
     void copyFrom(WXCoreLayoutNode* srcNode){
-      memcpy(mCssStyle, srcNode->mCssStyle, sizeof(WXCoreCSSStyle));
+        if (srcNode == nullptr) return;
+        
+        memcpy(mCssStyle, srcNode->mCssStyle, sizeof(WXCoreCSSStyle));
     }
 
     inline void copyMeasureFunc(WXCoreLayoutNode *srcNode) {
-      if (memcmp(&measureFunc, &srcNode->measureFunc, sizeof(WXCoreMeasureFunc)) != 0) {
+      if (srcNode != nullptr && memcmp(&measureFunc, &srcNode->measureFunc, sizeof(WXCoreMeasureFunc)) != 0) {
         memcpy(&measureFunc, &srcNode->measureFunc, sizeof(WXCoreMeasureFunc));
         markDirty();
       }
@@ -605,11 +613,16 @@ namespace WeexCore {
 
     void positionAbsoluteFlexItem(float &left, float &top, float &right, float &bottom);
 
-    void onLayout(float left, float top, float right, float bottom, WXCoreLayoutNode* = nullptr, WXCoreFlexLine *const flexLine = nullptr);
-
     void layoutHorizontal(bool isRtl, float left, float top, float right, float bottom,
                           WXCoreLayoutNode*, WXCoreFlexLine *const flexLine);
 
+      void layoutFlexlineHorizontal(const bool isRTL,
+                                    const float width,
+                                    const WXCoreFlexLine *const flexLine,
+                                    float &childLeft,
+                                    float &childRight,
+                                    float &spaceBetweenItem) const;
+      
     void layoutFlexlineHorizontal(const float width,
                                          const WXCoreFlexLine *const flexLine,
                                          float &childLeft,
@@ -666,7 +679,7 @@ namespace WeexCore {
 
 
   public:
-
+    virtual void onLayout(float left, float top, float right, float bottom, WXCoreLayoutNode* = nullptr, WXCoreFlexLine *const flexLine = nullptr);
     /** ================================ tree =================================== **/
 
     inline Index getChildCount(FormattingContext formattingContext) const {
@@ -707,7 +720,20 @@ namespace WeexCore {
           break;
         }
       }
+      
+      // also remove from BFC list, for determineChildLayoutDirection may encounter a wild pointer
+      for (int index = 0; index < BFCs.size(); index++) {
+          if (child == BFCs[index]) {
+              BFCs.erase(BFCs.begin() + index);
+              break;
+          }
+      }
+      
       markDirty();
+    }
+      
+    inline void clearBFCs() {
+        BFCs.clear();
     }
 
     inline void addChildAt(WXCoreLayoutNode* const child, Index index) {
@@ -836,7 +862,7 @@ namespace WeexCore {
       }
     }
 
-    inline WXCorePositionType getStypePositionType() const {
+    inline WXCorePositionType getStylePositionType() const {
       return mCssStyle->mPositionType;
     }
 
@@ -970,7 +996,33 @@ namespace WeexCore {
       return mCssStyle->mMaxHeight;
     }
 
+      inline void setDirection(const WXCoreDirection direction, const bool updating) {
+          if (nullptr == mCssStyle) return;
+          
+          if (mCssStyle->mDirection != direction) {
+              mCssStyle->mDirection = direction;
+              markDirty();
+              if (updating) {
+                  for (auto it = ChildListIterBegin(); it != ChildListIterEnd(); it++) {
+                      (*it)->markInheritableDirty();
+                  }
+              }
+          }
+      }
 
+    inline WXCoreDirection getDirection() const {
+        if (mCssStyle == nullptr) {
+            return WEEXCORE_CSS_DEFAULT_DIRECTION;
+        }
+        return mCssStyle->mDirection;
+    }
+    
+    /** ================================ CSS direction For RTL =================================== **/
+      
+    void determineChildLayoutDirection(const WXCoreDirection direction);
+      
+    WXCoreDirection getLayoutDirectionFromPathNode();
+      
     /** ================================ flex-style =================================== **/
 
     inline void setFlexDirection(const WXCoreFlexDirection flexDirection, const bool updating) {
@@ -1068,7 +1120,18 @@ namespace WeexCore {
     inline float getLayoutPositionRight() const  {
       return mLayoutResult->mLayoutPosition.getPosition(kPositionEdgeRight);
     }
+      
+    virtual inline WXCoreDirection getLayoutDirection() const {
+      if (nullptr == mLayoutResult) {
+        return WEEXCORE_CSS_DEFAULT_DIRECTION;
+      }
+      return mLayoutResult->mLayoutDirection;
+    }
 
+    inline void setLayoutDirection(WXCoreDirection direction) {
+        if (nullptr == mLayoutResult) return;
+        mLayoutResult->mLayoutDirection = direction;
+    }
     inline bool hasNewLayout() const {
       return mHasNewLayout;
     }
@@ -1112,6 +1175,38 @@ namespace WeexCore {
       return ret;
     }
 
+    void markInheritableDirty() {
+        if (resetInheritableSet()) {
+            // if some style was inherited from parent, reset those styles
+            // then mark self dirty
+            markDirty(false);
+            
+            // traverse children to mark dirty
+            if(getChildCount() == 0){
+                return;
+            }
+            else {
+                for (auto it = ChildListIterBegin(); it != ChildListIterEnd(); it++) {
+                    (*it)->markInheritableDirty();
+                }
+            }
+        }
+    }
+      
+    /**
+    * if some style was inherited from parent, reset those styles, then return true, eles return false
+    */
+    bool resetInheritableSet() {
+      if (mCssStyle == nullptr || mLayoutResult == nullptr) return false;
+        
+      bool hasInheritedStyle = false;
+      if (mCssStyle->mDirection == kDirectionInherit) {
+          mLayoutResult->mLayoutDirection = kDirectionInherit;
+          hasInheritedStyle = true;
+      }
+      return hasInheritedStyle;
+    }
+      
     inline void setHasNewLayout(const bool hasNewLayout) {
       this->mHasNewLayout = hasNewLayout;
     }
