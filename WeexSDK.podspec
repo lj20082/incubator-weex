@@ -202,7 +202,7 @@ Pod::Spec.new do |s|
   
   s.libraries = 'c++'
 
-  #s.dependency 'SDWebImage', '3.8.2'
-  #s.dependency 'Masonry'
+  s.dependency 'SDWebImage', '3.8.2'
+  s.dependency 'Masonry'
   #s.dependency 'YYCache'
 end
