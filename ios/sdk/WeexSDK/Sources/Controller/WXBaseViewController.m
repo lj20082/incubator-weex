@@ -27,8 +27,8 @@
 #import "WXPrerenderManager.h"
 #import "WXMonitor.h"
 /********/
-//#import <UIImage+GIF.h>
-//#import <Masonry.h>
+#import "UIImage+GIF.h"
+#import "Masonry.h"
 /********/
 
 @interface WXBaseViewController ()
