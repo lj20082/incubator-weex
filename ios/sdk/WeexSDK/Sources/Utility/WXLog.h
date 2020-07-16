@@ -19,6 +19,8 @@
 
 #import <Foundation/Foundation.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 #define WeexLogLevel WeexLogLevel
 
 typedef NS_ENUM(NSInteger, WXLogFlag) {

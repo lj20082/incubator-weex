@@ -175,7 +175,6 @@
         }
     }
 #endif
-    
     __weak typeof(self) weakSelf = self;
     
     [self.view addSubview:self.loadingView];
@@ -198,7 +197,7 @@
         [weakSelf.loadingView removeFromSuperview];
     };
     /********/
-    
+//    [_instance renderWithURL:[NSURL URLWithString:newURL] options:@{@"bundleUrl":sourceURL.absoluteString} data:nil];
     if([WXPrerenderManager isTaskReady:[self.sourceURL absoluteString]]){
         WX_MONITOR_INSTANCE_PERF_START(WXPTJSDownload, _instance);
         WX_MONITOR_INSTANCE_PERF_END(WXPTJSDownload, _instance);

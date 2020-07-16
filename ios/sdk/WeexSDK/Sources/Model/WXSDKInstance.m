@@ -670,7 +670,6 @@ typedef enum : NSUInteger {
         [pageEvent pageDestroy:self.instanceId];
     }
     [[NSNotificationCenter defaultCenter] postNotificationName:WX_INSTANCE_WILL_DESTROY_NOTIFICATION object:nil userInfo:@{@"instanceId":self.instanceId}];
-    
     /********/
     NSDictionary *dic = @{@"currentUrl":self.scriptURL.absoluteString?:@""};
     NSString *jsonString = [self convertToJsonStringWithDic:dic];
