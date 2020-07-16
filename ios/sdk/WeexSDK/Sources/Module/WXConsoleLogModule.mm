@@ -31,11 +31,11 @@
 
 @interface WXConsoleLogHandler : NSObject<WXLogProtocol>
 
-@property (nonatomic, assign) WXLogLevel logLevel;
+@property (nonatomic, assign) WeexLogLevel logLevel;
 
 + (WXConsoleLogHandler *)sharedInstance;
 
-- (WXLogLevel)logLevel;
+- (WeexLogLevel)logLevel;
 
 - (void)log:(WXLogFlag)flag message:(NSString *)message;
 
@@ -61,7 +61,7 @@
     return self;
 }
 
-- (WXLogLevel)logLevel
+- (WeexLogLevel)logLevel
 {
     return _logLevel;
 }
