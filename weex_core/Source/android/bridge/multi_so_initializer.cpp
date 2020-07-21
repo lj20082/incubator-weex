@@ -18,9 +18,11 @@
  */
 
 #include "multi_so_initializer.h"
-#include <android/base/log_utils.h>
-#include <android/utils/so_utils.h>
+
 #include <dlfcn.h>
+
+#include "android/utils/so_utils.h"
+#include "base/android/log_utils.h"
 
 namespace WeexCore {
 
@@ -41,7 +43,7 @@ bool MultiSoInitializer::Init(
     soPath = SoUtils::FindLibJssSoPath();
   }
 
-  LOGE("final executablePath:%s", soPath.c_str());
+  LOGD("final executablePath:%s", soPath.c_str());
   SoUtils::updateSoLinkPath(SoUtils::lib_ld_path());
   void *handle = dlopen(soPath.c_str(), RTLD_NOW);
   if (!handle) {

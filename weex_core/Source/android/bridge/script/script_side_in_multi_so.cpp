@@ -18,7 +18,7 @@
  */
 
 #include "script_side_in_multi_so.h"
-#include <android/base/log_utils.h>
+#include "base/android/log_utils.h"
 
 namespace WeexCore {
 namespace bridge {
@@ -140,23 +140,23 @@ void ScriptSideInMultiSo::ExecJSWithCallback(
 int ScriptSideInMultiSo::CreateInstance(const char *instanceId,
                                         const char *func, const char *script,
                                         const char *opts, const char *initData,
-                                        const char *extendsApi) {
+                                        const char *extendsApi, std::vector<INIT_FRAMEWORK_PARAMS*>& params) {
   if(script_side_functions_ == nullptr) {
     LOGE("ScriptSideInMultiSo::CreateInstance script_side_functions_ is null");
     return false;
   }
   return script_side_functions_->funcCreateInstance(instanceId, func, script,
-                                                    opts, initData, extendsApi);
+                                                    opts, initData, extendsApi, params);
 }
 
 std::unique_ptr<WeexJSResult> ScriptSideInMultiSo::ExecJSOnInstance(const char *instanceId,
-                                            const char *script) {
+                                            const char *script,int type) {
   if(script_side_functions_ == nullptr) {
     LOGE("ScriptSideInMultiSo::ExecJSOnInstance script_side_functions_ is null");
     std::unique_ptr<WeexJSResult> result;
     return  result;
   }
-  return script_side_functions_->funcExeJSOnInstance(instanceId, script);
+  return script_side_functions_->funcExeJSOnInstance(instanceId, script,type);
 }
 
 int ScriptSideInMultiSo::DestroyInstance(const char *instanceId) {
@@ -174,6 +174,25 @@ int ScriptSideInMultiSo::UpdateGlobalConfig(const char *config) {
   }
   return script_side_functions_->funcUpdateGlobalConfig(config);
 }
+
+int ScriptSideInMultiSo::UpdateInitFrameworkParams(const std::string &key, const std::string &value,
+                                                   const std::string &desc) {
+  if(script_side_functions_ == nullptr) {
+    LOGE("ScriptSideInMultiSo::UpdateInitFrameworkParams script_side_functions_ is null");
+    return false;
+  }
+  return script_side_functions_->funcUpdateInitFrameworkParams(key, value, desc);
+}
+
+void ScriptSideInMultiSo::SetLogType(const int logLevel, const bool isPerf) {
+  if(script_side_functions_ == nullptr) {
+    LOGE("ScriptSideInMultiSo::UpdateInitFrameworkParams script_side_functions_ is null");
+    return;
+  }
+  return script_side_functions_->funcSetLogType(logLevel, isPerf);
+
+}
+
 }  // namespace script
 }  // namespace bridge
 }  // namespace WeexCore

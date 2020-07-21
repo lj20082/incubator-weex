@@ -62,15 +62,19 @@ class ScriptSideInMultiProcess : public ScriptBridge::ScriptSide {
 
   int CreateInstance(const char *instanceId, const char *func,
                      const char *script, const char *opts, const char *initData,
-                     const char *extendsApi) override;
+                     const char *extendsApi, std::vector<INIT_FRAMEWORK_PARAMS*>& params) override;
 
-  std::unique_ptr<WeexJSResult> ExecJSOnInstance(const char *instanceId, const char *script) override;
+  std::unique_ptr<WeexJSResult> ExecJSOnInstance(const char *instanceId, const char *script,int type) override;
 
   int DestroyInstance(const char *instanceId) override;
 
   int UpdateGlobalConfig(const char *config) override;
 
-  ScriptSideInMultiProcess();
+  int UpdateInitFrameworkParams(const std::string& key, const std::string& value, const std::string& desc) override;
+
+  void SetLogType(const int logLevel, const bool isPerf) override;
+
+    ScriptSideInMultiProcess();
 
   virtual ~ScriptSideInMultiProcess();
 

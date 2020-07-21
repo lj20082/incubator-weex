@@ -4,7 +4,7 @@
  * distributed with this work for additional information
  * regarding copyright ownership.  The ASF licenses this file
  * to you under the Apache License, Version 2.0 (the
- * "License"){} you may not use this file except in compliance
+ * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
  *   http://www.apache.org/licenses/LICENSE-2.0
@@ -17,145 +17,71 @@
  * under the License.
  */
 
+#import "WXSDKError.h"
 #import "WXCoreBridge.h"
 #import "JSValue+Weex.h"
 #import "WXSDKManager.h"
 #import "WXComponentManager.h"
 #import "WXSDKInstance_private.h"
 #import "WXLog.h"
-#import "WXTracingManager.h"
 #import "WXBridgeProtocol.h"
 #import "WXUtility.h"
 #import "WXAssert.h"
 #import "WXAppConfiguration.h"
-
-#include "base/CoreConstants.h"
+#import "WXConvertUtility.h"
+#import "WXSDKEngine.h"
+#import "WXAppMonitorProtocol.h"
+#import "WXComponentMethod.h"
+#import "WXExceptionUtils.h"
+#import "WXModuleFactory.h"
+#import "WXComponentFactory.h"
+#import "WXRichText.h"
+#include "base/core_constants.h"
+#include "base/time_utils.h"
+#include "base/log_defines.h"
 #include "core/manager/weex_core_manager.h"
 #include "core/render/manager/render_manager.h"
+#include "core/render/target/render_target.h"
 #include "core/render/page/render_page.h"
+#include "core/render/page/render_page_custom.h"
 #include "core/render/node/render_object.h"
 #include "core/render/node/render_list.h"
 #include "core/render/node/factory/render_type.h"
 #include "core/render/node/factory/render_creator.h"
 #include "core/config/core_environment.h"
-#include "core/data_render/vnode/vnode_render_manager.h"
 #include "core/bridge/platform/core_side_in_platform.h"
 #include "core/bridge/script/core_side_in_script.h"
-#include "base/TimeUtils.h"
+#include "core/network/http_module.h"
 
 #import <objc/runtime.h>
 #include <fstream>
 
-
-#define NSSTRING(cstr) ((__bridge_transfer NSString*)(CFStringCreateWithCString(NULL, (const char *)(cstr), kCFStringEncodingUTF8)))
-#define NSSTRING_NO_COPY(cstr) ((__bridge_transfer NSString*)(CFStringCreateWithCStringNoCopy(NULL, (const char *)(cstr), kCFStringEncodingUTF8, kCFAllocatorNull)))
-
 namespace WeexCore
-{
-    static NSString* const JSONSTRING_SUFFIX = @"\t\n\t\r";
-    
-    static NSString* TO_JSON(id object)
+{    
+    static void consoleWithArguments(NSArray *arguments, WXLogFlag logLevel)
     {
-        if (object == nil) {
-            return nil;
-        }
-        
-        @try {
-            if ([object isKindOfClass:[NSArray class]] || [object isKindOfClass:[NSDictionary class]]) {
-                NSError *error = nil;
-                NSData *data = [NSJSONSerialization dataWithJSONObject:object
-                                                               options:0
-                                                                 error:&error];
-                
-                if (error) {
-                    WXLogError(@"%@", error);
-                    WXAssert(NO, @"Fail to convert object to json. %@", error);
-                    return nil;
-                }
-                
-                return [[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] stringByAppendingString:JSONSTRING_SUFFIX]; // add suffix so that we know this is a json string
-            }
-        } @catch (NSException *exception) {
-            WXLogError(@"%@", exception);
-            WXAssert(NO, @"Fail to convert object to json. %@", exception);
-            return nil;
-        }
-        
-        return nil;
-    }
-    
-    static id TO_OBJECT(NSString* s)
-    {
-        if ([s hasSuffix:JSONSTRING_SUFFIX]) {
-            if ([s length] == [JSONSTRING_SUFFIX length]) {
-                return [NSNull null];
-            }
-            
-            // s is a json string
-            @try {
-                NSError* error = nil;
-                id jsonObj = [NSJSONSerialization JSONObjectWithData:[s dataUsingEncoding:NSUTF8StringEncoding]
-                                                             options:NSJSONReadingMutableContainers | NSJSONReadingMutableLeaves
-                                                               error:&error];
-                
-                if (jsonObj == nil) {
-                    WXLogError(@"%@", error);
-                    WXAssert(NO, @"Fail to convert json to object. %@", error);
+        NSMutableString *jsLog = [NSMutableString string];
+        [jsLog appendString:@"jsLog: "];
+        [arguments enumerateObjectsUsingBlock:^(NSString *jsVal, NSUInteger idx, BOOL *stop) {
+            if (idx == arguments.count - 1) {
+                if (logLevel) {
+                    if (WXLogFlagWarning == logLevel || WXLogFlagError == logLevel) {
+                        id<WXAppMonitorProtocol> appMonitorHandler = [WXSDKEngine handlerForProtocol:@protocol(WXAppMonitorProtocol)];
+                        if ([appMonitorHandler respondsToSelector:@selector(commitAppMonitorAlarm:monitorPoint:success:errorCode:errorMsg:arg:)]) {
+                            [appMonitorHandler commitAppMonitorAlarm:@"weex" monitorPoint:@"jswarning" success:NO errorCode:@"99999" errorMsg:jsLog arg:[WXSDKEngine topInstance].pageName];
+                        }
+                    }
+                    WX_LOG(logLevel, @"%@", jsLog);
                 }
                 else {
-                    return jsonObj;
+                    [jsLog appendFormat:@"%@ ", jsVal];
+                    WXLogInfo(@"%@", jsLog);
                 }
-            } @catch (NSException *exception) {
-                WXLogError(@"%@", exception);
-                WXAssert(NO, @"Fail to convert json to object. %@", exception);
             }
-        }
-        return s; // return s instead
-    }
-    
-    static NSMutableDictionary* NSDICTIONARY(std::map<std::string, std::string>* map)
-    {
-        if (map == nullptr || map->size() == 0)
-            return [[NSMutableDictionary alloc] init];
-        
-        NSMutableDictionary* result = [[NSMutableDictionary alloc] initWithCapacity:map->size()];
-        for (auto it = map->begin(); it != map->end(); it ++) {
-            id object = TO_OBJECT(NSSTRING(it->second.c_str()));
-            if (object) {
-                [result setObject:object forKey:NSSTRING(it->first.c_str())];
+            else {
+                [jsLog appendFormat:@"%@ ", jsVal];
             }
-        }
-        return result;
-    }
-    
-    static NSMutableDictionary* NSDICTIONARY(std::vector<std::pair<std::string, std::string>>* vec)
-    {
-        if (vec == nullptr || vec->size() == 0)
-            return [[NSMutableDictionary alloc] init];
-        
-        NSMutableDictionary* result = [[NSMutableDictionary alloc] initWithCapacity:vec->size()];
-        for (auto& p : *vec) {
-            id object = TO_OBJECT(NSSTRING(p.second.c_str()));
-            if (object) {
-                [result setObject:object forKey:NSSTRING(p.first.c_str())];
-            }
-        }
-        return result;
-    }
-    
-    static NSMutableArray* NSARRAY(std::set<std::string>* set)
-    {
-        if (set == nullptr || set->size() == 0)
-            return [[NSMutableArray alloc] init];
-        
-        NSMutableArray* result = [[NSMutableArray alloc] initWithCapacity:set->size()];
-        for (auto& s : *set) {
-            id object = TO_OBJECT(NSSTRING(s.c_str()));
-            if (object) {
-                [result addObject:object];
-            }
-        }
-        return result;
+        }];
     }
     
     static void MergeBorderWidthValues(NSMutableDictionary* dict,
@@ -178,7 +104,7 @@ namespace WeexCore
             dict[@"borderRightWidth"] = @(borders.getBorderWidth(kBorderWidthRight) / pixelScaleFactor);
         }
     }
-    
+
     static void MergeBorderWidthValues(NSMutableDictionary* dict,
                                        std::vector<std::pair<std::string, std::string>>* borders,
                                        float pixelScaleFactor)
@@ -194,7 +120,7 @@ namespace WeexCore
             dict[NSSTRING(p.first.c_str())] = @(atof(p.second.c_str()) / pixelScaleFactor);
         }
     }
-    
+
     void IOSSide::SetJSVersion(const char* version)
     {
         NSString *jsVersion = NSSTRING(version);
@@ -203,30 +129,142 @@ namespace WeexCore
         }
     }
     
-    void IOSSide::ReportException(const char* pageId, const char *func, const char *exception_string)
+    void IOSSide::ReportException(const char *page_id, const char *func, const char *exception)
     {
-        NSString* ns_instanceId = NSSTRING(pageId);
-
-        WXComponentManager* manager = [WXSDKManager instanceForID:ns_instanceId].componentManager;
-        if (!manager.isValid) {
-            return;
-        }
-
-        int wxErrorCode = 9999;
-        NSError * error = [NSError errorWithDomain:WX_ERROR_DOMAIN code:wxErrorCode userInfo:@{@"message":[NSString stringWithUTF8String:exception_string]}];
-        [manager renderFailed:error];
+        do {
+            WXSDKInstance *instance = [WXSDKManager instanceForID:NSSTRING(page_id)];
+            if (!instance) {
+                break;
+            }
+            WXSDKErrCode errorCode = WX_ERR_JS_EXECUTE;
+            BOOL is_render_failed = NO;
+            if (func && (strcmp(func, "CreatePageWithContent") == 0 || strcmp(func, "UpdateComponentData") == 0)) {
+                errorCode = WX_KEY_EXCEPTION_DEGRADE_EAGLE_RENDER_ERROR;
+                WXComponentManager *manager = instance.componentManager;
+                if (manager.isValid) {
+                    NSError *error = [NSError errorWithDomain:WX_ERROR_DOMAIN code:errorCode userInfo:@{@"message":[NSString stringWithUTF8String:exception], @"exception function:":@(func)}];
+                    [manager renderFailed:error];
+                }
+                is_render_failed = YES;
+            }
+            NSString *bundleUrl = instance.pageName ? : ([instance.scriptURL absoluteString] ? : @"WX_KEY_EXCEPTION_WXBRIDGE");
+            NSMutableDictionary *userInfo = [[NSMutableDictionary alloc] init];
+            [userInfo setObject:instance.userInfo[@"jsMainBundleStringContentLength"] ? : @"" forKey:@"jsMainBundleStringContentLength"];
+            [userInfo setObject:instance.userInfo[@"jsMainBundleStringContentMd5"] ? : @"" forKey:@"jsMainBundleStringContentMd5"];
+            WXJSExceptionInfo *jsException = [[WXJSExceptionInfo alloc] initWithInstanceId:instance.instanceId bundleUrl:bundleUrl errorCode: [NSString stringWithFormat:@"%d", errorCode] functionName:func ? [NSString stringWithUTF8String:func] :@"exceptionHandler" exception:exception ? [NSString stringWithUTF8String:exception] : @"unkown" userInfo:userInfo];
+            [WXExceptionUtils commitCriticalExceptionRT:jsException.instanceId errCode:jsException.errorCode function:jsException.functionName exception:jsException.exception extParams:jsException.userInfo];
+            if (!is_render_failed && instance.onJSRuntimeException) {
+                instance.onJSRuntimeException(jsException);
+            }
+            
+        } while (0);
+        
     }
     
     int IOSSide::CallNative(const char* pageId, const char *task, const char *callback)
     {
         // should not enter this function
-        assert(false);
+        assert(false); //!OCLint
     }
     
-    std::unique_ptr<ValueWithType> IOSSide::CallNativeModule(const char *page_id, const char *module, const char *method,
-                                         const char *args, int argc,
-                                         const char *options, int optionsLength)
+    static WeexByteArray *generator_bytes_array(const char *str, size_t len) {
+        auto *result = (WeexByteArray *)malloc(len + sizeof(WeexByteArray));
+        do {
+            if (!result) {
+                break;
+            }
+            memset(result, 0, len + sizeof(WeexByteArray));
+            result->length = static_cast<uint32_t>(len);
+            memcpy(result->content, str, len);
+            result->content[len] = '\0';
+            
+        } while (0);
+        
+        return result;
+    }
+    std::unique_ptr<ValueWithType> IOSSide::RegisterPluginComponent(const char *pcstr_name, const char *pcstr_class_name, const char *pcstr_version) {
+        ValueWithType *returnValue = new ValueWithType();
+        memset(returnValue, 0, sizeof(ValueWithType));
+        returnValue->type = ParamsType::VOID;
+        do {
+            if (!pcstr_class_name) {
+                break;
+            }
+            NSString *className = [NSString stringWithUTF8String:pcstr_class_name];
+            Class clazz = NSClassFromString(className);
+            if (!clazz) {
+                break;
+            }
+            if (!pcstr_name) {
+                break;
+            }
+            NSDictionary *properties = @{ @"append" : @"tree" };
+            NSString *name = [NSString stringWithUTF8String:pcstr_name];
+            [WXComponentFactory registerComponent:name withClass:clazz withPros:properties];
+            NSMutableDictionary *info = [WXComponentFactory componentMethodMapsWithName:name];
+            if (![info isKindOfClass:[NSDictionary class]]) {
+                break;
+            }
+            NSArray *methods = info[@"methods"];
+            if (![methods isKindOfClass:[NSArray class]] || !methods.count) {
+                break;
+            }
+            info[@"type"] = name;
+            NSMutableDictionary *props = [properties mutableCopy];
+            [props addEntriesFromDictionary:info];
+            NSString *componentsInfo = [WXUtility JSONString:@[props]];
+            if (componentsInfo.length > 0) {
+                returnValue->type = ParamsType::BYTEARRAYSTRING;
+                const char *pcstr_utf8 = [componentsInfo UTF8String];
+                returnValue->value.byteArray = generator_bytes_array(pcstr_utf8, componentsInfo.length);
+            }
+            
+        } while (0);
+        
+        return std::unique_ptr<ValueWithType>(returnValue);
+    }
+    
+    std::unique_ptr<ValueWithType> IOSSide::RegisterPluginModule(const char *pcstr_name, const char *pcstr_class_name, const char *pcstr_version) {
+        ValueWithType *returnValue = new ValueWithType();
+        memset(returnValue, 0, sizeof(ValueWithType));
+        returnValue->type = ParamsType::VOID;
+        do {
+            if (!pcstr_class_name) {
+                break;
+            }
+            NSString *className = [NSString stringWithUTF8String:pcstr_class_name];
+            Class clazz = NSClassFromString(className);
+            if (!clazz) {
+                break;
+            }
+            if (!pcstr_name) {
+                break;
+            }
+            NSString *name = [NSString stringWithUTF8String:pcstr_name];
+            NSString *moduleName = [WXModuleFactory registerModule:name withClass:clazz];
+            if (!moduleName.length) {
+                break;
+            }
+            NSDictionary *moduleInfo = [WXModuleFactory moduleMethodMapsWithName:moduleName];
+            if (!moduleInfo || ![moduleInfo isKindOfClass:[NSDictionary class]]) {
+                break;
+            }
+            NSString *setting = [WXUtility JSONString:moduleInfo];
+            if (setting.length > 0) {
+                returnValue->type = ParamsType::BYTEARRAYSTRING;
+                const char *pcstr_utf8 = [setting UTF8String];
+                returnValue->value.byteArray = generator_bytes_array(pcstr_utf8, setting.length);
+            }
+
+        } while (0);
+        
+        return std::unique_ptr<ValueWithType>(returnValue);
+    }
+    std::unique_ptr<ValueWithType> IOSSide::CallNativeModule(const char *page_id, const char *module, const char *method, const char *args, int args_length, const char *options, int options_length)
     {
+        ValueWithType *returnValue = new ValueWithType();
+        memset(returnValue, 0, sizeof(ValueWithType));
+        returnValue->type = ParamsType::VOID;
         // should not enter this function
         do {
             NSString *instanceId = NSSTRING(page_id);
@@ -237,41 +275,163 @@ namespace WeexCore
             NSString *moduleName = [NSString stringWithUTF8String:module];
             NSString *methodName = [NSString stringWithUTF8String:method];
             NSArray *newArguments;
-            if (argc > 0 && args) {
+            if (args && args_length > 0) {
                 NSString *arguments = [NSString stringWithUTF8String:args];
                 newArguments = [WXUtility objectFromJSON:arguments];
             }
+            LOGD("CallNativeModule:[%s]:[%s]=>%s \n", module, method, args);
             WXModuleMethod *method = [[WXModuleMethod alloc] initWithModuleName:moduleName methodName:methodName arguments:newArguments options:nil instance:instance];
-            [method invoke];
+            NSInvocation *invocation = [method invoke];
+            if (!invocation) {
+                break;
+            }
+            const char *returnType = [invocation.methodSignature methodReturnType];
+            switch (returnType[0] == _C_CONST ? returnType[1] : returnType[0]) {
+                case _C_VOID: {
+                    // 1.void
+                    returnValue->type = ParamsType::VOID;
+                    break;
+                }
+                case _C_ID: {
+                    // 2.id
+                    void *value;
+                    [invocation getReturnValue:&value];
+                    id object = (__bridge id)value;
+                    if ([object isKindOfClass:[NSString class]]) {
+                        returnValue->type = ParamsType::BYTEARRAYSTRING;
+                        const char *pcstr_utf8 = [(NSString *)object UTF8String];
+                        returnValue->value.byteArray = generator_bytes_array(pcstr_utf8, ((NSString *)object).length);
+                    }
+                    if ([object isKindOfClass:[NSDictionary class]] || [object isKindOfClass:[NSArray class]]) {
+                        NSString *jsonString = [WXUtility JSONString:object];
+                        returnValue->type = ParamsType::BYTEARRAYJSONSTRING;
+                        returnValue->value.byteArray = generator_bytes_array(jsonString.UTF8String, jsonString.length);
+                    }
+                    break;
+                }
+#define WX_MODULE_INT32_VALUE_RET_CASE(ctype, ttype) \
+case ctype: {                         \
+ttype value;                          \
+[invocation getReturnValue:&value];   \
+returnValue->type = ParamsType::INT32; \
+returnValue->value.int32Value = value; \
+break; \
+}
+#define WX_MODULE_INT64_VALUE_RET_CASE(ctype, ttype) \
+case ctype: {                         \
+ttype value;                          \
+[invocation getReturnValue:&value];   \
+returnValue->type = ParamsType::INT64; \
+returnValue->value.int64Value = value; \
+break; \
+}
+                // 3.number
+                WX_MODULE_INT32_VALUE_RET_CASE(_C_CHR, char)
+                WX_MODULE_INT32_VALUE_RET_CASE(_C_UCHR, unsigned char)
+                WX_MODULE_INT32_VALUE_RET_CASE(_C_SHT, short)
+                WX_MODULE_INT32_VALUE_RET_CASE(_C_USHT, unsigned short)
+                WX_MODULE_INT32_VALUE_RET_CASE(_C_INT, int)
+                WX_MODULE_INT32_VALUE_RET_CASE(_C_UINT, unsigned int)
+                WX_MODULE_INT32_VALUE_RET_CASE(_C_BOOL, BOOL)
+                WX_MODULE_INT64_VALUE_RET_CASE(_C_LNG, long)
+                WX_MODULE_INT64_VALUE_RET_CASE(_C_ULNG, unsigned long)
+                WX_MODULE_INT64_VALUE_RET_CASE(_C_LNG_LNG, long long)
+                WX_MODULE_INT64_VALUE_RET_CASE(_C_ULNG_LNG, unsigned long long)
+                case _C_FLT:
+                {
+                    float value;
+                    [invocation getReturnValue:&value];
+                    returnValue->type = ParamsType::FLOAT;
+                    returnValue->value.floatValue = value;
+                    break;
+                }
+                case _C_DBL:
+                {
+                    double value;
+                    [invocation getReturnValue:&value];
+                    returnValue->type = ParamsType::DOUBLE;
+                    returnValue->value.doubleValue = value;
+                    break;
+                }
+                case _C_STRUCT_B:
+                case _C_CHARPTR:
+                case _C_PTR:
+                case _C_CLASS: {
+                    returnValue->type = ParamsType::JSUNDEFINED;
+                    break;
+                }
+            }
             
         } while (0);
         
-        return std::unique_ptr<ValueWithType>();
+        return std::unique_ptr<ValueWithType>(returnValue);
     }
         
-    void IOSSide::CallNativeComponent(const char* pageId, const char* ref, const char *method,
-                                           const char *arguments, int argumentsLength,
-                                           const char *options, int optionsLength)
+    void IOSSide::CallNativeComponent(const char *page_id, const char *ref, const char *method,
+                                      const char *args, int args_length,
+                                      const char *options, int options_length)
     {
-        // should not enter this function
-        assert(false);
+        do {
+            NSString *instanceId = NSSTRING(page_id);
+            WXSDKInstance *instance = [WXSDKManager instanceForID:instanceId];
+            if (!instance) {
+                break;
+            }
+            if (!ref || !method) {
+                break;
+            }
+            NSString *componentRef = [NSString stringWithUTF8String:ref];
+            NSString *methodName = [NSString stringWithUTF8String:method];
+            NSArray *newArguments;
+            if (args && args_length > 0) {
+                NSString *arguments = [NSString stringWithUTF8String:args];
+                newArguments = [WXUtility objectFromJSON:arguments];
+            }
+            WXComponentMethod *method = [[WXComponentMethod alloc] initWithComponentRef:componentRef methodName:methodName arguments:newArguments instance:instance];
+            [method invoke];
+            
+        } while (0);
     }
-        
+
     void IOSSide::SetTimeout(const char* callbackID, const char* time)
     {
         // should not enter this function
-        assert(false);
+        assert(false); //!OCLint
     }
-        
-    void IOSSide::NativeLog(const char* str_array)
+
+    void IOSSide::NativeLog(const char *args)
     {
         // should not enter this function
-        assert(false);
+        do {
+            if (!args) {
+                break;
+            }
+            NSArray *newArguments;
+            if (args) {
+                NSString *arguments = [NSString stringWithUTF8String:args];
+                newArguments = [WXUtility objectFromJSON:arguments];
+            }
+            if (![newArguments isKindOfClass:[NSArray class]] || !newArguments.count) {
+                break;
+            }
+            static NSDictionary *levelMap;
+            static dispatch_once_t onceToken;
+            dispatch_once(&onceToken, ^{
+                levelMap = @{@"__ERROR": @(WXLogFlagError),
+                          @"__WARN": @(WXLogFlagWarning),
+                          @"__INFO": @(WXLogFlagInfo),
+                          @"__DEBUG": @(WXLogFlagDebug),
+                          @"__LOG": @(WXLogFlagLog)};
+            });
+            NSString *levelStr = [newArguments lastObject];
+            consoleWithArguments(newArguments, (WXLogFlag)[levelMap[levelStr] integerValue]);
+            
+        } while (0);
     }
     
     void IOSSide::TriggerVSync(const char* page_id)
     {
-        RenderPage *page = RenderManager::GetInstance()->GetPage(page_id);
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(page_id);
         if (page == nullptr) {
             return;
         }
@@ -287,7 +447,7 @@ namespace WeexCore
     int IOSSide::UpdateFinish(const char* page_id, const char* task, int taskLen,
                                    const char* callback, int callbackLen)
     {
-        RenderPage *page = RenderManager::GetInstance()->GetPage(page_id);
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(page_id);
         if (page == nullptr) {
             return -1;
         }
@@ -299,14 +459,13 @@ namespace WeexCore
         }
         [manager startComponentTasks];
         [manager updateFinish];
-        [WXTracingManager startTracingWithInstanceId:ns_instanceId ref:nil className:nil name:WXTDomCall phase:WXTracingEnd functionName:@"updateFinish" options:@{@"threadName":WXTDOMThread}];
-        
+
         return 0;
     }
         
     int IOSSide::RefreshFinish(const char* pageId, const char *task, const char *callback)
     {
-        RenderPage *page = RenderManager::GetInstance()->GetPage(pageId);
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(pageId);
         if (page == nullptr) {
             return -1;
         }
@@ -318,14 +477,13 @@ namespace WeexCore
         }
         [manager startComponentTasks];
         [manager refreshFinish];
-        [WXTracingManager startTracingWithInstanceId:ns_instanceId ref:nil className:nil name:WXTDomCall phase:WXTracingEnd functionName:@"refreshFinish" options:@{@"threadName":WXTDOMThread}];
         
         return 0;
     }
         
     int IOSSide::AddEvent(const char* pageId, const char* ref, const char *event)
     {
-        RenderPage *page = RenderManager::GetInstance()->GetPage(pageId);
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(pageId);
         if (page == nullptr) {
             return -1;
         }
@@ -340,13 +498,12 @@ namespace WeexCore
         WXLogDebug(@"flexLayout -> action: addEvent ref:%@", ns_ref);
 #endif
         
-        WXComponentManager* manager = [WXSDKManager instanceForID:ns_instanceId].componentManager;
+        WXComponentManager *manager = [WXSDKManager instanceForID:ns_instanceId].componentManager;
         if (!manager.isValid) {
             return -1;
         }
         [manager startComponentTasks];
         [manager addEvent:ns_event toComponent:ns_ref];
-        [WXTracingManager startTracingWithInstanceId:ns_instanceId ref:ns_ref className:nil name:WXTDomCall phase:WXTracingEnd functionName:@"addEvent" options:@{@"threadName":WXTDOMThread}];
 
         page->CallBridgeTime(getCurrentTime() - startTime);
         return 0;
@@ -354,7 +511,7 @@ namespace WeexCore
         
     int IOSSide::RemoveEvent(const char* pageId, const char* ref, const char *event)
     {
-        RenderPage *page = RenderManager::GetInstance()->GetPage(pageId);
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(pageId);
         if (page == nullptr) {
             return -1;
         }
@@ -375,7 +532,6 @@ namespace WeexCore
         }
         [manager startComponentTasks];
         [manager removeEvent:ns_event fromComponent:ns_ref];
-        [WXTracingManager startTracingWithInstanceId:ns_instanceId ref:ns_ref className:nil name:WXTDomCall phase:WXTracingEnd functionName:@"removeEvent" options:@{@"threadName":WXTDOMThread}];
     
         page->CallBridgeTime(getCurrentTime() - startTime);
         return 0;
@@ -389,7 +545,7 @@ namespace WeexCore
                                      const WXCorePadding &paddings,
                                      const WXCoreBorderWidth &borders)
     {
-        RenderPage *page = RenderManager::GetInstance()->GetPage(pageId);
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(pageId);
         if (page == nullptr) {
             return -1;
         }
@@ -418,7 +574,6 @@ namespace WeexCore
         }
         [manager startComponentTasks];
         [manager createBody:ns_ref type:ns_type styles:ns_styles attributes:ns_attributes events:ns_events renderObject:renderObject];
-        [WXTracingManager startTracingWithInstanceId:ns_instanceId ref:ns_ref className:nil name:WXTDomCall phase:WXTracingEnd functionName:@"createBody" options:@{@"threadName":WXTDOMThread}];
         
         page->CallBridgeTime(getCurrentTime() - startTime);
         return 0;
@@ -434,7 +589,7 @@ namespace WeexCore
                            const WXCoreBorderWidth &borders,
                            bool willLayout)
     {
-        RenderPage *page = RenderManager::GetInstance()->GetPage(pageId);
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(pageId);
         if (page == nullptr) {
             return -1;
         }
@@ -466,17 +621,44 @@ namespace WeexCore
         
         [manager startComponentTasks];
         [manager addComponent:ns_ref type:ns_componentType parentRef:ns_parentRef styles:ns_styles attributes:ns_attributes events:ns_events index:ns_index renderObject:renderObject];
-        [WXTracingManager startTracingWithInstanceId:ns_instanceId ref:ns_ref className:nil name:WXTDomCall phase:WXTracingEnd functionName:@"addElement" options:@{@"threadName":WXTDOMThread}];
 
         page->CallBridgeTime(getCurrentTime() - startTime);
         return 0;
     }
     
+    int IOSSide::AddChildToRichtext(const char* pageId, const char *nodeType, const char* ref,
+                            const char* parentRef, const char* richtextRef,
+                            std::map<std::string, std::string> *styles,
+                            std::map<std::string, std::string> *attributes)
+    {
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(pageId);
+        if (page == nullptr) {
+            return -1;
+        }
+        NSString* ns_richtextRef = NSSTRING(richtextRef);
+        NSString* ns_instanceId = NSSTRING(pageId);
+        NSString* ns_nodeType = NSSTRING(nodeType);
+        NSString* ns_ref = NSSTRING(ref);
+        NSString* ns_parentRef = NSSTRING(parentRef);
+        NSMutableDictionary* ns_styles = NSDICTIONARY(styles);
+        NSDictionary* ns_attributes = NSDICTIONARY(attributes);
+
+        WXSDKInstance* sdkInstance = [WXSDKManager instanceForID:ns_instanceId];
+        WXComponentManager* manager = sdkInstance.componentManager;
+        if (!manager.isValid) {
+            return -1;
+        }
+
+        WXRichText* richtext = (WXRichText*)[manager componentForRef:ns_richtextRef];
+        [richtext addChildNode:ns_nodeType ref:ns_ref styles:ns_styles attributes:ns_attributes toSuperNodeRef:ns_parentRef];
+        return 0;
+    }
+
     int IOSSide::Layout(const char* pageId, const char* ref,
                        float top, float bottom, float left, float right,
-                       float height, float width, int index)
+                       float height, float width, bool isRTL, int index)
     {
-        RenderPage *page = RenderManager::GetInstance()->GetPage(pageId);
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(pageId);
         if (page == nullptr) {
             return -1;
         }
@@ -494,11 +676,11 @@ namespace WeexCore
         if (!manager.isValid) {
             return -1;
         }
-        CGRect frame = CGRectMake(isnan(WXRoundPixelValue(left))?0:WXRoundPixelValue(left),
-                                  isnan(WXRoundPixelValue(top))?0:WXRoundPixelValue(top),
-                                  isnan(WXRoundPixelValue(width))?0:WXRoundPixelValue(width),
-                                  isnan(WXRoundPixelValue(height))?0:WXRoundPixelValue(height));
-        [manager layoutComponent:component frame:frame innerMainSize:renderObject->getLargestMainSize()];
+        CGRect frame = CGRectMake(isnan(WXCeilPixelValue(left))?0:WXCeilPixelValue(left),
+                                  isnan(WXCeilPixelValue(top))?0:WXCeilPixelValue(top),
+                                  isnan(WXCeilPixelValue(width))?0:WXCeilPixelValue(width),
+                                  isnan(WXCeilPixelValue(height))?0:WXCeilPixelValue(height));
+        [manager layoutComponent:component frame:frame isRTL:isRTL innerMainSize:renderObject->getLargestMainSize()];
 
         page->CallBridgeTime(getCurrentTime() - startTime);
         return 0;
@@ -506,7 +688,7 @@ namespace WeexCore
     
     void IOSSide::InvokeLayoutPlatform(const char* page_id, long render_ptr)
     {
-        RenderPage *page = RenderManager::GetInstance()->GetPage(page_id);
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(page_id);
         if (page == nullptr) {
             return;
         }
@@ -530,13 +712,42 @@ namespace WeexCore
         page->CallBridgeTime(getCurrentTime() - startTime);
     }
     
+    int IOSSide::UpdateRichtextStyle(const char* pageId, const char* ref,
+                             std::vector<std::pair<std::string, std::string>> *style,
+                             const char* parent_ref, const char* richtext_ref)
+    {
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(pageId);
+        if (page == nullptr) {
+            return -1;
+        }
+
+        NSString* ns_instanceId = NSSTRING(pageId);
+        NSString* ns_ref = NSSTRING(ref);
+        NSString* ns_richtextRef = NSSTRING(richtext_ref);
+        NSString* ns_parentRef = NSSTRING(parent_ref);
+        NSMutableDictionary* ns_style = NSDICTIONARY(style);
+
+        WXSDKInstance* sdkInstance = [WXSDKManager instanceForID:ns_instanceId];
+        if (!sdkInstance) {
+            return -1;
+        }
+        WXComponentManager* manager = sdkInstance.componentManager;
+        if (!manager.isValid) {
+            return -1;
+        }
+
+        WXRichText* richtext = (WXRichText*)[manager componentForRef:ns_richtextRef];
+        [richtext updateChildNodeStyles:ns_style ref:ns_ref parentRef:ns_parentRef];
+        return 0;
+    }
+
     int IOSSide::UpdateStyle(const char* pageId, const char* ref,
                             std::vector<std::pair<std::string, std::string>> *style,
                             std::vector<std::pair<std::string, std::string>> *margin,
                             std::vector<std::pair<std::string, std::string>> *padding,
                             std::vector<std::pair<std::string, std::string>> *border)
     {
-        RenderPage *page = RenderManager::GetInstance()->GetPage(pageId);
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(pageId);
         if (page == nullptr) {
             return -1;
         }
@@ -561,7 +772,6 @@ namespace WeexCore
         
         [manager startComponentTasks];
         [manager updateStyles:ns_style forComponent:ns_ref];
-        [WXTracingManager startTracingWithInstanceId:ns_instanceId ref:ns_ref className:nil name:WXTDomCall phase:WXTracingEnd functionName:@"updateStyles" options:@{@"threadName":WXTDOMThread}];
         
         page->CallBridgeTime(getCurrentTime() - startTime);
         return 0;
@@ -577,7 +787,7 @@ namespace WeexCore
             return 0;
         }
         
-        RenderPage *page = RenderManager::GetInstance()->GetPage(pageId);
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(pageId);
         if (page == nullptr) {
             return -1;
         }
@@ -598,18 +808,47 @@ namespace WeexCore
         }
         [manager startComponentTasks];
         [manager updateAttributes:ns_attributes forComponent:ns_ref];
-        [WXTracingManager startTracingWithInstanceId:ns_instanceId ref:ns_ref className:nil name:WXTDomCall phase:WXTracingEnd functionName:@"updateAttrs" options:@{@"threadName":WXTDOMThread}];
 
         page->CallBridgeTime(getCurrentTime() - startTime);
+        return 0;
+    }
+
+    int IOSSide::UpdateRichtextChildAttr(const char* pageId, const char* ref,
+                            std::vector<std::pair<std::string, std::string>> *attrs, const char* parent_ref, const char* richtext_ref)
+    {
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(pageId);
+        if (page == nullptr) {
+            return -1;
+        }
+        if (attrs == nullptr) {
+            return 0;
+        }
+        if (attrs->size() == 0) {
+            return 0;
+        }
+
+        NSString* ns_instanceId = NSSTRING(pageId);
+        NSString* ns_ref = NSSTRING(ref);
+        NSString* ns_parentRef = NSSTRING(parent_ref);
+        NSString* ns_richtextRef = NSSTRING(richtext_ref);
+        NSDictionary* ns_attributes = NSDICTIONARY(attrs);
+        WXSDKInstance* sdkInstance = [WXSDKManager instanceForID:ns_instanceId];
+        if (!sdkInstance) {
+            return -1;
+        }
+        WXComponentManager* manager = sdkInstance.componentManager;
+        if (!manager.isValid) {
+            return -1;
+        }
+
+        WXRichText* richtext = (WXRichText*)[manager componentForRef:ns_richtextRef];
+        [richtext updateChildNodeAttributes:ns_attributes ref:ns_ref parentRef:ns_parentRef];
         return 0;
     }
         
     int IOSSide::CreateFinish(const char* pageId)
     {
-        RenderPage *page = RenderManager::GetInstance()->GetPage(pageId);
-        if (page == nullptr) {
-            return -1;
-        }
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(pageId);
         
         long long startTime = getCurrentTime();
         
@@ -625,18 +864,16 @@ namespace WeexCore
         }
         [manager startComponentTasks];
         [manager createFinish];
-        [WXTracingManager startTracingWithInstanceId:ns_instanceId ref:nil className:nil name:WXTDomCall phase:WXTracingEnd functionName:@"createFinish" options:@{@"threadName":WXTDOMThread}];
 
-        page->CallBridgeTime(getCurrentTime() - startTime);
+        if (page) {
+            page->CallBridgeTime(getCurrentTime() - startTime);
+        }
         return 0;
     }
     
     int IOSSide::RenderSuccess(const char* pageId)
     {
-        RenderPage *page = RenderManager::GetInstance()->GetPage(pageId);
-        if (page == nullptr) {
-            return -1;
-        }
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(pageId);
         
         long long startTime = getCurrentTime();
         
@@ -652,15 +889,37 @@ namespace WeexCore
         }
         [manager startComponentTasks];
         [manager renderFinish];
-        [WXTracingManager startTracingWithInstanceId:ns_instanceId ref:nil className:nil name:WXTDomCall phase:WXTracingEnd functionName:@"renderFinish" options:@{@"threadName":WXTDOMThread}];
         
-        page->CallBridgeTime(getCurrentTime() - startTime);
+        if (page) {
+            page->CallBridgeTime(getCurrentTime() - startTime);
+        }
         return 0;
     }
+
+    int IOSSide::RemoveChildFromRichtext(const char* pageId, const char* ref, const char* parent_ref, const char* richtext_ref) {
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(pageId);
+        if (page == nullptr) {
+            return -1;
+        }
         
+        NSString* ns_instanceId = NSSTRING(pageId);
+        NSString* ns_richtextRef = NSSTRING(richtext_ref);
+        NSString* ns_ref = NSSTRING(ref);
+        NSString* ns_parentRef = NSSTRING(parent_ref);
+
+        WXSDKInstance* sdkInstance = [WXSDKManager instanceForID:ns_instanceId];
+        WXComponentManager* manager = sdkInstance.componentManager;
+        if (!manager.isValid) {
+            return -1;
+        }
+
+        WXRichText* richtext = (WXRichText*)[manager componentForRef:ns_richtextRef];
+        [richtext removeChildNode:ns_ref superNodeRef:ns_parentRef];
+        return 0;
+    }
     int IOSSide::RemoveElement(const char* pageId, const char* ref)
     {
-        RenderPage *page = RenderManager::GetInstance()->GetPage(pageId);
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(pageId);
         if (page == nullptr) {
             return -1;
         }
@@ -681,7 +940,6 @@ namespace WeexCore
         
         [manager startComponentTasks];
         [manager removeComponent:ns_ref];
-        [WXTracingManager startTracingWithInstanceId:ns_instanceId ref:ns_ref className:nil name:WXTDomCall phase:WXTracingEnd functionName:@"removeElement" options:@{@"threadName":WXTDOMThread}];
         
         page->CallBridgeTime(getCurrentTime() - startTime);
         return 0;
@@ -689,7 +947,7 @@ namespace WeexCore
         
     int IOSSide::MoveElement(const char* pageId, const char* ref, const char* parentRef, int index)
     {
-        RenderPage *page = RenderManager::GetInstance()->GetPage(pageId);
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(pageId);
         if (page == nullptr) {
             return -1;
         }
@@ -712,7 +970,6 @@ namespace WeexCore
         
         [manager startComponentTasks];
         [manager moveComponent:ns_ref toSuper:ns_parentRef atIndex:ns_index];
-        [WXTracingManager startTracingWithInstanceId:ns_instanceId ref:ns_ref className:nil name:WXTDomCall phase:WXTracingEnd functionName:@"moveElement" options:@{@"threadName":WXTDOMThread}];
         
         page->CallBridgeTime(getCurrentTime() - startTime);
         return 0;
@@ -720,7 +977,7 @@ namespace WeexCore
         
     int IOSSide::AppendTreeCreateFinish(const char* pageId, const char* ref)
     {
-        RenderPage *page = RenderManager::GetInstance()->GetPage(pageId);
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(pageId);
         if (page == nullptr) {
             return -1;
         }
@@ -744,7 +1001,7 @@ namespace WeexCore
     int IOSSide::HasTransitionPros(const char* pageId, const char* ref,
                               std::vector<std::pair<std::string, std::string>> *style)
     {
-        RenderPage *page = RenderManager::GetInstance()->GetPage(pageId);
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(pageId);
         if (page == nullptr) {
             return -1;
         }
@@ -769,13 +1026,19 @@ namespace WeexCore
         page->CallBridgeTime(getCurrentTime() - startTime);
         return result;
     }
-    
+
+    void IOSSide::PostTaskOnComponentThread(const weex::base::Closure closure) {
+        WXPerformBlockOnComponentThread(^{
+            closure();
+        });
+    }
+
 #pragma mark - Layout Impl
     
     WXCoreSize WXCoreMeasureFunctionBridge::Measure(const char* page_id, long render_ptr, float width, MeasureMode widthMeasureMode, float height, MeasureMode heightMeasureMode)
     {
         // should not enter this function
-        assert(false);
+        assert(false); //!OCLint
     }
     
     void WXCoreMeasureFunctionBridge::LayoutBefore(const char* page_id, long render_ptr)
@@ -787,7 +1050,480 @@ namespace WeexCore
     {
         
     }
+    
+#pragma mark - Log Bridge
+    
+    class LogBridgeIOS: public weex::base::LogBase {
+    public:
+        virtual bool log(LogLevel level, const char* tag, const char* file, unsigned long line, const char* log) override {
+#ifdef DEBUG
+            switch (level) {
+                case LogLevel::Error:
+                    printf("<%s:Error|%s:%lu> %s\n", tag, file, line, log);
+                    break;
+                case LogLevel::Warn:
+                    printf("<%s:Warn|%s:%lu> %s\n", tag, file, line, log);
+                    break;
+                case LogLevel::Info:
+                    printf("<%s:Info|%s:%lu> %s\n", tag, file, line, log);
+                    break;
+                case LogLevel::Debug:
+                    printf("<%s:Debug|%s:%lu> %s\n", tag, file, line, log);
+                    break;
+                default:
+                    break;
+            }
+#else
+            WXLogFlag wxLogLevel;
+            switch (level) {
+                case LogLevel::Error:
+                    wxLogLevel = WXLogFlagError;
+                    break;
+                case LogLevel::Warn:
+                    wxLogLevel = WXLogFlagWarning;
+                    break;
+                case LogLevel::Info:
+                    wxLogLevel = WXLogFlagInfo;
+                    break;
+                default:
+                    wxLogLevel = WXLogFlagDebug;
+                    break;
+            }
+            
+            [WXLog devLog:wxLogLevel file:file line:line format:@"<%s> %s", tag, log];
+#endif
+            return true;
+        }
+    };
 }
+
+@interface WXCustomPageBridge()
+{
+    std::mutex _customPageLock;
+    std::map<std::string, WeexCore::RenderPageCustom*> _customPages;
+    
+    WeexCore::RenderPageCustom* _lastPage;
+}
+
+@end
+
+@implementation WXCustomPageBridge
+
++ (instancetype)sharedInstance
+{
+    static dispatch_once_t onceToken;
+    static WXCustomPageBridge* instance;
+    dispatch_once(&onceToken, ^{
+        instance = [[WXCustomPageBridge alloc] init];
+    });
+    return instance;
+}
+
++ (BOOL)isCustomPage:(NSString*)pageId
+{
+    return [pageId integerValue] % 2 != 0;
+}
+
++ (NSSet<NSString*>*)getAvailableCustomRenderTypes
+{
+    NSMutableSet<NSString*>* result = [[NSMutableSet alloc] init];
+    for (const std::string& s : WeexCore::RenderTargetManager::sharedInstance()->getAvailableTargetNames()) {
+        [result addObject:NSSTRING(s.c_str())];
+    }
+    return result;
+}
+
++ (UIView*)createPageRootView:(NSString*)pageId pageType:(NSString*)pageType frame:(CGRect)frame
+{
+    auto target = WeexCore::RenderTargetManager::sharedInstance()->getRenderTarget([pageType UTF8String]?:"");
+    if (target) {
+        return (__bridge UIView*)((void*)(target->createRootView([pageId UTF8String]?:"", frame.origin.x, frame.origin.y, frame.size.width, frame.size.height)));
+    }
+    return nil;
+}
+
++ (void)parseRenderObject:(NSDictionary *)data
+                parentRef:(const std::string&)parentRef
+                    index:(int)index
+                genObject:(void(^)(const std::string& ref,
+                                   const std::string& type,
+                                   const std::string& parentRef,
+                                   std::map<std::string, std::string>* styles,
+                                   std::map<std::string, std::string>* attrs,
+                                   std::set<std::string>* events,
+                                   int index))onGenObject
+{
+    const char* type = [data[@"type"] UTF8String];
+    const char* ref = [data[@"ref"] UTF8String];
+    if (type != nullptr && ref != nullptr) {
+        std::map<std::string, std::string>* styles = new std::map<std::string, std::string>();
+        std::map<std::string, std::string>* attrs = new std::map<std::string, std::string>();
+        std::set<std::string>* events = new std::set<std::string>();
+        
+        [data[@"attr"] enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, id  _Nonnull obj, BOOL * _Nonnull stop) {
+            ConvertToCString(obj, ^(const char * value) {
+                if (value != nullptr) {
+                    (*attrs)[[key UTF8String]] = value;
+                }
+            });
+        }];
+        
+        [data[@"style"] enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, id  _Nonnull obj, BOOL * _Nonnull stop) {
+            ConvertToCString(obj, ^(const char * value) {
+                if (value != nullptr) {
+                    (*styles)[[key UTF8String]] = value;
+                }
+            });
+        }];
+        
+        for (id obj in data[@"event"]) {
+            ConvertToCString(obj, ^(const char * value) {
+                if (value != nullptr) {
+                    events->insert(value);
+                }
+            });
+        }
+        
+        std::string thisRef = ref;
+        std::string thisType = type;
+        onGenObject(thisRef, thisType, parentRef, styles, attrs, events, index);
+        
+        // parse children
+        int childIndex = 0;
+        for (NSDictionary* obj in data[@"children"]) {
+            [self parseRenderObject:obj parentRef:thisRef index:childIndex ++ genObject:onGenObject];
+        }
+    }
+}
+
++ (std::vector<std::pair<std::string, std::string>>*)parseMapValuePairs:(NSDictionary *)data
+{
+    std::vector<std::pair<std::string, std::string>>* result = new std::vector<std::pair<std::string, std::string>>();
+    [data enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, id  _Nonnull obj, BOOL * _Nonnull stop) {
+        ConvertToCString(obj, ^(const char * value) {
+            if (value != nullptr) {
+                result->emplace_back([key UTF8String], value);
+            }
+        });
+    }];
+    return result;
+}
+
+- (WeexCore::RenderPageCustom*)getPage:(NSString*)pageId
+{
+    std::lock_guard<std::mutex> lockGuard(_customPageLock);
+    std::string sId = [pageId UTF8String] ?: "";
+    if (_lastPage && _lastPage->page_id() == sId) {
+        // avoid a map search
+        return _lastPage;
+    }
+    auto findPage = _customPages.find([pageId UTF8String] ?: "");
+    _lastPage = findPage == _customPages.end() ? nullptr : findPage->second;
+    return _lastPage;
+}
+
+- (void)invalidatePage:(NSString*)pageId
+{
+    std::lock_guard<std::mutex> lockGuard(_customPageLock);
+    auto findPage = _customPages.find([pageId UTF8String] ?: "");
+    if (findPage != _customPages.end()) {
+        findPage->second->Invalidate();
+    }
+}
+
+- (void)removePage:(NSString*)pageId
+{
+    RenderPageCustom* thePage = nullptr;
+    {
+        std::lock_guard<std::mutex> lockGuard(_customPageLock);
+        auto findPage = _customPages.find([pageId UTF8String] ?: "");
+        if (findPage != _customPages.end()) {
+            thePage = findPage->second;
+            _customPages.erase(findPage);
+        }
+    }
+    
+    if (thePage) {
+        thePage->OnRenderPageClose();
+        delete thePage;
+        _lastPage = nullptr;
+    }
+}
+
+- (void)callCreateBody:(NSString*)pageId data:(NSDictionary*)data
+{
+    using namespace WeexCore;
+    
+    WXSDKInstance* sdkInstance = [WXSDKManager instanceForID:pageId];
+    WXComponentManager* manager = sdkInstance.componentManager;
+    if (!manager.isValid) {
+        return;
+    }
+    
+    std::string sId = [pageId UTF8String] ?: "";
+    if (sId.empty()) {
+        return;
+    }
+    
+    auto pageArgs = RenderManager::GetInstance()->removePageArguments(sId);
+    RenderPageCustom::PageOptions options;
+    
+    options.is_round_off = false;
+    options.view_scale = 1;
+    auto value = WXCoreEnvironment::getInstance()->GetOption("pixel_scale");
+    if (value != "") {
+        options.view_scale = strtof(value.c_str(), NULL);
+    }
+    
+    auto findViewPort = pageArgs.find("viewportwidth");
+    if (findViewPort != pageArgs.end()) {
+        options.viewport_width = strtof(findViewPort->second.c_str(), nullptr);
+    }
+    else {
+        options.viewport_width = kDefaultViewPortWidth;
+    }
+    
+    auto findDeviceWidth = pageArgs.find("devicewidth");
+    if (findDeviceWidth != pageArgs.end()) {
+        options.device_width = strtof(findDeviceWidth->second.c_str(), nullptr);
+    }
+    else {
+        /* For iOS DeviceWidth stored by WeexCore is in UIKit view system coordinate(iPhone6 is 375).
+         So we must provide heron with the pixel device width here. */
+        options.device_width = WXCoreEnvironment::getInstance()->DeviceWidth() * options.view_scale;
+    }
+    
+    std::swap(options.args, pageArgs);
+    
+    RenderPageCustom* page = new RenderPageCustom(sId, "heron", options);
+    
+    {
+        std::lock_guard<std::mutex> lockGuard(_customPageLock);
+        _customPages[sId] = page;
+    }
+    
+    SetConvertCurrentPage(pageId);
+    [WXCustomPageBridge parseRenderObject:data parentRef:"" index:0 genObject:^(const std::string &ref, const std::string &type, const std::string &parentRef, std::map<std::string, std::string> *styles, std::map<std::string, std::string> *attrs, std::set<std::string> *events, int index) {
+        if (parentRef.empty()) {
+            // is root body
+            page->CreateBody(ref, type, styles, attrs, events);
+        }
+        else {
+            page->AddRenderObject(ref, type, parentRef, index, styles, attrs, events);
+        }
+    }];
+}
+
+- (void)callAddElement:(NSString*)pageId parentRef:(NSString*)parentRef data:(NSDictionary*)data index:(int)index
+{
+    RenderPageCustom* page = [self getPage:pageId];
+    if (page && page->IsValid()) {
+        [WXCustomPageBridge parseRenderObject:data parentRef:[parentRef UTF8String] ?: "" index:index genObject:^(const std::string &ref, const std::string &type, const std::string &parentRef, std::map<std::string, std::string> *styles, std::map<std::string, std::string> *attrs, std::set<std::string> *events, int index) {
+            page->AddRenderObject(ref, type, parentRef, index, styles, attrs, events);
+        }];
+    }
+}
+
+- (void)callRemoveElement:(NSString*)pageId ref:(NSString*)ref
+{
+    RenderPageCustom* page = [self getPage:pageId];
+    if (page && page->IsValid()) {
+        page->RemoveRenderObject([ref UTF8String] ?: "");
+    }
+}
+
+- (void)callMoveElement:(NSString*)pageId ref:(NSString*)ref parentRef:(NSString*)parentRef index:(int)index
+{
+    RenderPageCustom* page = [self getPage:pageId];
+    if (page && page->IsValid()) {
+        page->MoveRenderObject([ref UTF8String] ?: "", [parentRef UTF8String] ?: "", index);
+    }
+}
+
+- (void)callUpdateAttrs:(NSString*)pageId ref:(NSString*)ref data:(NSDictionary*)data
+{
+    RenderPageCustom* page = [self getPage:pageId];
+    if (page && page->IsValid()) {
+        SetConvertCurrentPage(pageId);
+        page->UpdateAttr([ref UTF8String] ?: "", [WXCustomPageBridge parseMapValuePairs:data]);
+    }
+}
+
+- (void)callUpdateStyle:(NSString*)pageId ref:(NSString*)ref data:(NSDictionary*)data
+{
+    RenderPageCustom* page = [self getPage:pageId];
+    if (page && page->IsValid()) {
+        SetConvertCurrentPage(pageId);
+        page->UpdateStyle([ref UTF8String] ?: "", [WXCustomPageBridge parseMapValuePairs:data]);
+    }
+}
+
+- (void)callAddEvent:(NSString*)pageId ref:(NSString*)ref event:(NSString*)event
+{
+    RenderPageCustom* page = [self getPage:pageId];
+    if (page && page->IsValid()) {
+        page->AddEvent([ref UTF8String] ?: "", [event UTF8String] ?: "");
+    }
+}
+
+- (void)callRemoveEvent:(NSString*)pageId ref:(NSString*)ref event:(NSString*)event
+{
+    RenderPageCustom* page = [self getPage:pageId];
+    if (page && page->IsValid()) {
+        page->RemoveEvent([ref UTF8String] ?: "", [event UTF8String] ?: "");
+    }
+}
+
+- (void)callCreateFinish:(NSString*)pageId
+{
+    WXPerformBlockOnComponentThread(^{
+        RenderPageCustom* page = [self getPage:pageId];
+        if (page && page->IsValid()) {
+            page->CreateFinish();
+        }
+    });
+}
+
+- (void)callRefreshFinish:(NSString*)pageId
+{
+    // TODO, this may not be correct, for heron may also need to implement refresh finish.
+    WeexCore::WeexCoreManager::Instance()->script_bridge()->core_side()->RefreshFinish([pageId UTF8String] ?: "", nullptr, nullptr);
+}
+
+- (void)callUpdateFinish:(NSString*)pageId
+{
+    // TODO, this may not be correct, for heron may also need to implement update finish.
+    WeexCore::WeexCoreManager::Instance()->script_bridge()->core_side()->UpdateFinish([pageId UTF8String] ?: "", nullptr, 0, nullptr, 0);
+}
+
+- (BOOL)forwardCallNativeModuleToCustomPage:(NSString*)pageId
+                                 moduleName:(NSString*)moduleName methodName:(NSString*)methodName
+                                  arguments:(NSArray*)arguments options:(NSDictionary*)options
+                                returnValue:(id*)returnValue
+{
+    using namespace WeexCore;
+    
+    RenderPageCustom* page = [self getPage:pageId];
+    if (page && page->IsValid()) {
+        RenderTarget* target = page->GetRenderTarget();
+        if (target && target->shouldHandleModuleMethod([moduleName UTF8String] ?: "", [methodName UTF8String] ?: "")) {
+            __block const char* seralizedArguments = nullptr;
+            __block const char* seralizedOptions = nullptr;
+            SetConvertCurrentPage(pageId);
+            ConvertToCString(arguments, ^(const char * value) {
+                if (value != nullptr) {
+                    seralizedArguments = strdup(value);
+                }
+            });
+            ConvertToCString(options, ^(const char * value) {
+                if (value != nullptr) {
+                    seralizedOptions = strdup(value);
+                }
+            });
+            
+            bool handled = false;
+            std::unique_ptr<ValueWithType> result = target->callNativeModule([pageId UTF8String] ?: "", [moduleName UTF8String] ?: "", [methodName UTF8String] ?: "", seralizedArguments ?: "", seralizedArguments ? (int)(strlen(seralizedArguments)) : 0, seralizedOptions ?: "", seralizedOptions ? (int)(strlen(seralizedOptions)) : 0, handled);
+            
+            if (seralizedArguments) {
+                free((void*)seralizedArguments);
+            }
+            if (seralizedOptions) {
+                free((void*)seralizedOptions);
+            }
+            
+            if (handled && result) {
+                switch (result->type) {
+                    case ParamsType::INT32:
+                        *returnValue = @(result->value.int32Value);
+                        break;
+                    case ParamsType::INT64:
+                        *returnValue = @(result->value.int64Value);
+                        break;
+                    case ParamsType::FLOAT:
+                        *returnValue = @(result->value.floatValue);
+                        break;
+                    case ParamsType::DOUBLE:
+                        *returnValue = @(result->value.doubleValue);
+                        break;
+                    case ParamsType::JSONSTRING:
+                    {
+                        NSString* s = [NSString stringWithCharacters:(const unichar *)(result->value.string->content) length:result->value.string->length];
+                        free(result->value.string);
+                        
+                        @try {
+                            NSError* error = nil;
+                            id jsonObj = [NSJSONSerialization JSONObjectWithData:[s dataUsingEncoding:NSUTF8StringEncoding]
+                                                                         options:NSJSONReadingMutableContainers | NSJSONReadingMutableLeaves
+                                                                           error:&error];
+                            
+                            if (jsonObj == nil) {
+                                WXLogError(@"%@", error);
+                                WXAssert(NO, @"Fail to convert json to object. %@", error);
+                            }
+                            else {
+                                *returnValue = jsonObj;
+                            }
+                        } @catch (NSException *exception) {
+                            WXLogError(@"%@", exception);
+                            WXAssert(NO, @"Fail to convert json to object. %@", exception);
+                        }
+                    }
+                        break;
+                    case ParamsType::STRING:
+                        *returnValue = [NSString stringWithCharacters:(const unichar *)(result->value.string->content) length:result->value.string->length];
+                        free(result->value.string);
+                        break;
+                    default:
+                        *returnValue = nil;
+                        break;
+                }
+                return YES;
+            }
+        }
+    }
+    
+    return NO;
+}
+
+- (void)forwardCallComponentToCustomPage:(NSString*)pageId
+                                     ref:(NSString*)ref
+                              methodName:(NSString*)methodName
+                               arguments:(NSArray*)arguments
+                                 options:(NSDictionary*)options
+{
+    using namespace WeexCore;
+    
+    RenderPageCustom* page = [self getPage:pageId];
+    if (page && page->IsValid()) {
+        RenderTarget* target = page->GetRenderTarget();
+        if (target) {
+            __block const char* seralizedArguments = nullptr;
+            __block const char* seralizedOptions = nullptr;
+            SetConvertCurrentPage(pageId);
+            ConvertToCString(arguments, ^(const char * value) {
+                if (value != nullptr) {
+                    seralizedArguments = strdup(value);
+                }
+            });
+            ConvertToCString(options, ^(const char * value) {
+                if (value != nullptr) {
+                    seralizedOptions = strdup(value);
+                }
+            });
+            
+            target->callNativeComponent([pageId UTF8String] ?: "", [ref UTF8String] ?: "", [methodName UTF8String] ?: "", seralizedArguments ?: "", seralizedArguments ? (int)(strlen(seralizedArguments)) : 0, seralizedOptions ?: "", seralizedOptions ? (int)(strlen(seralizedOptions)) : 0);
+            
+            if (seralizedArguments) {
+                free((void*)seralizedArguments);
+            }
+            if (seralizedOptions) {
+                free((void*)seralizedOptions);
+            }
+        }
+    }
+}
+
+@end
 
 @implementation WXCoreBridge
 
@@ -800,14 +1536,29 @@ static WeexCore::ScriptBridge* jsBridge = nullptr;
     dispatch_once(&onceToken, ^{
         WeexCore::WXCoreEnvironment* env = WeexCore::WXCoreEnvironment::getInstance();
         env->SetPlatform(OS_iOS);
-        env->AddOption("scale", "1");
         
+        /* For historical reason, layout in weexcore and layout result are in iOS UIView system unit.
+         So we pass 'scale' as 1 to affect nothing.
+         */
+        env->AddOption("scale", "1");
+        env->AddOption("pixel_scale", std::to_string([[UIScreen mainScreen] scale]));
+        
+        // Here we initialize weex device width and height using portrait by default.
         CGSize screenSize = [UIScreen mainScreen].bounds.size;
-        env->SetDeviceWidth(std::to_string(screenSize.width));
-        env->SetDeviceHeight(std::to_string(screenSize.height));
-        env->AddOption("screen_width_pixels", std::to_string(screenSize.width));
-        env->AddOption("screen_height_pixels", std::to_string(screenSize.height));
-        env->AddOption("status_bar_height", std::to_string([[UIApplication sharedApplication] statusBarFrame].size.height));
+        CGFloat w = MIN(screenSize.width, screenSize.height);
+        CGFloat h = MAX(screenSize.width, screenSize.height);
+        env->SetDeviceWidth(std::to_string(w));
+        env->SetDeviceHeight(std::to_string(h));
+        env->AddOption("screen_width_pixels", std::to_string(w));
+        env->AddOption("screen_height_pixels", std::to_string(h));
+        
+        weex::base::LogImplement::getLog()->setLogImplement(new WeexCore::LogBridgeIOS());
+        
+#ifdef DEBUG
+        weex::base::LogImplement::getLog()->setDebugMode(true);
+#else
+        weex::base::LogImplement::getLog()->setDebugMode(false);
+#endif
         
         platformBridge = new WeexCore::PlatformBridge();
         platformBridge->set_platform_side(new WeexCore::IOSSide());
@@ -822,58 +1573,14 @@ static WeexCore::ScriptBridge* jsBridge = nullptr;
     });
 }
 
-+ (void)createDataRenderInstance:(NSString *)pageId template:(NSString *)jsBundleString options:(NSDictionary *)options  data:(id)data
++ (void)registerComponentAffineType:(NSString *)type asType:(NSString *)baseType
 {
-    auto node_manager = weex::core::data_render::VNodeRenderManager::GetInstance();
-    NSString *optionsString = [WXUtility JSONString:options];
-    NSString *dataString = [WXUtility JSONString:data];
-    node_manager->CreatePage([jsBundleString UTF8String] ?: "", [pageId UTF8String] ?: "", [optionsString UTF8String] ?: "", [dataString UTF8String] ?: "");
+    WeexCore::RenderCreator::GetInstance()->RegisterAffineType([type UTF8String] ?: "", [baseType UTF8String] ?: "");
 }
 
-+ (void)createDataRenderInstance:(NSString *)pageId contents:(NSData *)contents options:(NSDictionary *)options data:(id)data
++ (BOOL)isComponentAffineType:(NSString *)type asType:(NSString *)baseType
 {
-    auto node_manager = weex::core::data_render::VNodeRenderManager::GetInstance();
-    NSString *optionsString = [WXUtility JSONString:options];
-    NSString *dataString = [WXUtility JSONString:data];
-
-//    NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) lastObject];
-//    NSString *txtPath = [documentsPath stringByAppendingPathComponent:@"test.wasm"];
-//    std::string path = [txtPath UTF8String];
-//    std::ifstream fin(path, std::ios::in|std::ios::binary|std::ios::ate);
-//    unsigned length = static_cast<unsigned>(fin.tellg());
-//
-//    char* buffer = new char[length];
-//    fin.seekg (0, std::ios::beg);
-//    fin.read(buffer, length);
-//    fin.close();
-
-    node_manager->CreatePage(static_cast<const char*>(contents.bytes), contents.length, [pageId UTF8String], [optionsString UTF8String], dataString ? [dataString UTF8String] : "");
-}
-
-+ (void)destroyDataRenderInstance:(NSString *)pageId
-{
-    auto node_manager = weex::core::data_render::VNodeRenderManager::GetInstance();
-    node_manager->ClosePage([pageId UTF8String] ?: "");
-}
-
-+ (void)refreshDataRenderInstance:(NSString *)pageId data:(NSString *)data;
-{
-    auto node_manager = weex::core::data_render::VNodeRenderManager::GetInstance();
-    node_manager->RefreshPage([pageId UTF8String] ?: "", [data UTF8String] ?: "");
-}
-
-+ (void)fireEvent:(NSString *)pageId ref:(NSString *)ref event:(NSString *)event args:(NSDictionary *)args
-{
-    NSString *params = [WXUtility JSONString:args];
-    auto vnode_manager = weex::core::data_render::VNodeRenderManager::GetInstance();
-    vnode_manager->FireEvent([pageId UTF8String] ? : "", [ref UTF8String] ? : "", [event UTF8String] ? : "", [params UTF8String] ? : "");
-}
-
-+ (void)registerModules:(NSDictionary *)modules {
-    NSString *setting = [WXUtility JSONString:modules];
-    if (setting.length > 0) {
-        weex::core::data_render::VNodeRenderManager::GetInstance()->RegisterModules([setting UTF8String] ? : "");
-    }
+    return WeexCore::RenderCreator::GetInstance()->IsAffineType([type UTF8String] ?: "", [baseType UTF8String] ?: "");
 }
 
 + (void)setDefaultDimensionIntoRoot:(NSString*)pageId width:(CGFloat)width height:(CGFloat)height
@@ -893,10 +1600,34 @@ static WeexCore::ScriptBridge* jsBridge = nullptr;
     }
 }
 
++ (void)setDeviceSize:(CGSize)size
+{
+    [WXCoreBridge install];
+    WeexCore::WXCoreEnvironment* env = WeexCore::WXCoreEnvironment::getInstance();
+    env->SetDeviceWidth(std::to_string(size.width));
+    env->SetDeviceHeight(std::to_string(size.height));
+}
+
++ (CGSize)getDeviceSize
+{
+    [WXCoreBridge install];
+    WeexCore::WXCoreEnvironment* env = WeexCore::WXCoreEnvironment::getInstance();
+    return CGSizeMake(env->DeviceWidth(), env->DeviceHeight());
+}
+
 + (void)setViewportWidth:(NSString*)pageId width:(CGFloat)width
 {
+    [WXCoreBridge install];
     if (platformBridge) {
         platformBridge->core_side()->SetViewPortWidth([pageId UTF8String] ?: "", (float)width);
+    }
+}
+
++ (void)setPageRequired:(NSString *)pageId width:(CGFloat)width height:(CGFloat)height
+{
+    [WXCoreBridge install];
+    if (platformBridge) {
+        platformBridge->core_side()->SetDeviceDisplayOfPage([pageId UTF8String] ?: "", (float)width, (float)height);
     }
 }
 
@@ -914,11 +1645,28 @@ static WeexCore::ScriptBridge* jsBridge = nullptr;
     }
 }
 
++ (double)getLayoutTime:(NSString*)pageId {
+    if (platformBridge) {
+        const char* page = [pageId UTF8String] ?: "";
+        return platformBridge->core_side()->GetLayoutTime(page);
+    }
+    return 0;
+}
+
 + (void)closePage:(NSString*)pageId
 {
     if (platformBridge) {
+        platformBridge->core_side()->DestroyInstance([pageId UTF8String]);
         platformBridge->core_side()->OnInstanceClose([pageId UTF8String] ?: "");
     }
+}
+
++ (BOOL)reloadPageLayout:(NSString*)pageId
+{
+    if (platformBridge) {
+        return platformBridge->core_side()->RelayoutUsingRawCssStyles([pageId UTF8String] ?: "");
+    }
+    return false;
 }
 
 + (void)_traverseTree:(WeexCore::RenderObject *)render index:(int)index pageId:(const char *)pageId
@@ -929,7 +1677,7 @@ static WeexCore::ScriptBridge* jsBridge = nullptr;
     if (render->hasNewLayout()) {
         /* do not call bridge->callLayout because render is not registered to page, so that
          page->GetRenderObject will not give the correct object. */
-        RenderPage *page = RenderManager::GetInstance()->GetPage(pageId);
+        RenderPageBase *page = RenderManager::GetInstance()->GetPage(pageId);
         if (page != nullptr) {
             WXComponent* component = (__bridge WXComponent *)(render->getContext());
             NSString* ns_instanceId = NSSTRING(pageId);
@@ -938,13 +1686,13 @@ static WeexCore::ScriptBridge* jsBridge = nullptr;
             float left = render->getLayoutPositionLeft();
             float height = render->getLayoutHeight();
             float width = render->getLayoutWidth();
-            
+            BOOL isRTL = render->getLayoutDirectionFromPathNode() == WeexCore::kDirectionRTL;
             WXComponentManager* manager = [WXSDKManager instanceForID:ns_instanceId].componentManager;
-            CGRect frame = CGRectMake(isnan(WXRoundPixelValue(left))?0:WXRoundPixelValue(left),
-                                      isnan(WXRoundPixelValue(top))?0:WXRoundPixelValue(top),
-                                      isnan(WXRoundPixelValue(width))?0:WXRoundPixelValue(width),
-                                      isnan(WXRoundPixelValue(height))?0:WXRoundPixelValue(height));
-            [manager layoutComponent:component frame:frame innerMainSize:render->getLargestMainSize()];
+            CGRect frame = CGRectMake(isnan(WXCeilPixelValue(left))?0:WXCeilPixelValue(left),
+                                      isnan(WXCeilPixelValue(top))?0:WXCeilPixelValue(top),
+                                      isnan(WXCeilPixelValue(width))?0:WXCeilPixelValue(width),
+                                      isnan(WXCeilPixelValue(height))?0:WXCeilPixelValue(height));
+            [manager layoutComponent:component frame:frame isRTL:isRTL innerMainSize:render->getLargestMainSize()];
         }
         render->setHasNewLayout(false);
     }
@@ -995,44 +1743,25 @@ static WeexCore::ScriptBridge* jsBridge = nullptr;
 + (void)removeRenderObjectFromMap:(NSString*)pageId object:(void*)object
 {
     using namespace WeexCore;
-    RenderPage* page = RenderManager::GetInstance()->GetPage([pageId UTF8String] ?: "");
+    RenderPage* page = static_cast<RenderPage*>(RenderManager::GetInstance()->GetPage([pageId UTF8String] ?: ""));
     if (page != nullptr) {
         page->RemoveRenderFromRegisterMap(static_cast<RenderObject*>(object));
     }
 }
 
-static void _convertToCString(id _Nonnull obj, void (^callback)(const char*))
-{
-    if ([obj isKindOfClass:[NSString class]]) {
-        callback([obj UTF8String]);
-    }
-    else if ([obj isKindOfClass:[NSNumber class]]) {
-        callback([[(NSNumber*)obj stringValue] UTF8String]);
-    }
-    else if ([obj isKindOfClass:[NSNull class]]) {
-        callback([JSONSTRING_SUFFIX UTF8String]);
-    }
-    else {
-        NSString* jsonstring = WeexCore::TO_JSON(obj);
-        if (jsonstring != nil) {
-            callback([jsonstring UTF8String]);
-        }
-    }
-}
-
-+ (void)_parseStyleBeforehand:(NSDictionary *)styles key:(NSString *)key render:(WeexCore::RenderObject*)render
++ (void)_parseStyleBeforehand:(NSDictionary *)styles key:(NSString *)key render:(WeexCore::RenderObject*)render reserveStyles:(bool)reserveStyles
 {
     id data = styles[key];
     if (data) {
-        _convertToCString(data, ^(const char * value) {
+        ConvertToCString(data, ^(const char * value) {
             if (value != nullptr) {
-                render->AddStyle([key UTF8String], value);
+                render->AddStyle([key UTF8String], value, reserveStyles);
             }
         });
     }
 }
 
-+ (WeexCore::RenderObject*)_parseRenderObject:(NSDictionary *)data parent:(WeexCore::RenderObject *)parent index:(int)index pageId:(const std::string&)pageId
++ (WeexCore::RenderObject*)_parseRenderObject:(NSDictionary *)data parent:(WeexCore::RenderObject *)parent index:(int)index pageId:(const std::string&)pageId reserveStyles:(bool)reserveStyles
 {
     using namespace WeexCore;
     
@@ -1046,7 +1775,7 @@ static void _convertToCString(id _Nonnull obj, void (^callback)(const char*))
         }
         
         [data[@"attr"] enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, id  _Nonnull obj, BOOL * _Nonnull stop) {
-            _convertToCString(obj, ^(const char * value) {
+            ConvertToCString(obj, ^(const char * value) {
                 if (value != nullptr) {
                     render->AddAttr([key UTF8String], value);
                 }
@@ -1055,22 +1784,22 @@ static void _convertToCString(id _Nonnull obj, void (^callback)(const char*))
         
         // margin/padding/borderWidth should be handled beforehand. Because maringLeft should override margin.
         NSDictionary* styles = data[@"style"];
-        [self _parseStyleBeforehand:styles key:@"margin" render:render];
-        [self _parseStyleBeforehand:styles key:@"padding" render:render];
-        [self _parseStyleBeforehand:styles key:@"borderWidth" render:render];
+        [self _parseStyleBeforehand:styles key:@"margin" render:render reserveStyles:reserveStyles];
+        [self _parseStyleBeforehand:styles key:@"padding" render:render reserveStyles:reserveStyles];
+        [self _parseStyleBeforehand:styles key:@"borderWidth" render:render reserveStyles:reserveStyles];
         [styles enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, id  _Nonnull obj, BOOL * _Nonnull stop) {
             if ([key isEqualToString:@"margin"] || [key isEqualToString:@"padding"] || [key isEqualToString:@"borderWidth"]) {
                 return;
             }
-            _convertToCString(obj, ^(const char * value) {
+            ConvertToCString(obj, ^(const char * value) {
                 if (value != nullptr) {
-                    render->AddStyle([key UTF8String], value);
+                    render->AddStyle([key UTF8String], value, reserveStyles);
                 }
             });
         }];
         
         for (id obj in data[@"event"]) {
-            _convertToCString(obj, ^(const char * value) {
+            ConvertToCString(obj, ^(const char * value) {
                 if (value != nullptr) {
                     render->AddEvent(value);
                 }
@@ -1079,10 +1808,10 @@ static void _convertToCString(id _Nonnull obj, void (^callback)(const char*))
         
         int childIndex = 0;
         for (NSDictionary* obj in data[@"children"]) {
-            [self _parseRenderObject:obj parent:render index:childIndex ++ pageId:pageId];
+            [self _parseRenderObject:obj parent:render index:childIndex ++ pageId:pageId reserveStyles:reserveStyles];
         }
         
-        render->ApplyDefaultStyle();
+        render->ApplyDefaultStyle(reserveStyles);
         render->ApplyDefaultAttr();
         
         return render;
@@ -1094,7 +1823,7 @@ static void _convertToCString(id _Nonnull obj, void (^callback)(const char*))
 {
     std::vector<std::pair<std::string, std::string>>* result = new std::vector<std::pair<std::string, std::string>>();
     [data enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, id  _Nonnull obj, BOOL * _Nonnull stop) {
-        _convertToCString(obj, ^(const char * value) {
+        ConvertToCString(obj, ^(const char * value) {
             if (value != nullptr) {
                 result->emplace_back([key UTF8String], value);
             }
@@ -1106,20 +1835,30 @@ static void _convertToCString(id _Nonnull obj, void (^callback)(const char*))
 + (void)callAddElement:(NSString*)pageId parentRef:(NSString*)parentRef data:(NSDictionary*)data index:(int)index
 {
     using namespace WeexCore;
+    
     const std::string page([pageId UTF8String] ?: "");
-    RenderObject* child = [self _parseRenderObject:data parent:nullptr index:0 pageId:page];
-    RenderManager::GetInstance()->AddRenderObject(page, [parentRef UTF8String] ?: "", index, child);
+    RenderManager::GetInstance()->AddRenderObject(page, [parentRef UTF8String] ?: "", index, [&] (RenderPage* pageInstance) -> RenderObject* {
+        return [self _parseRenderObject:data parent:nullptr index:0 pageId:page reserveStyles:pageInstance->reserve_css_styles()];
+    });
 }
 
 + (void)callCreateBody:(NSString*)pageId data:(NSDictionary*)data
 {
     using namespace WeexCore;
+    
+    WXSDKInstance* sdkInstance = [WXSDKManager instanceForID:pageId];
+    WXComponentManager* manager = sdkInstance.componentManager;
+    if (!manager.isValid) {
+        return;
+    }
+    
+    SetConvertCurrentPage(pageId);
     const std::string page([pageId UTF8String] ?: "");
     RenderManager::GetInstance()->CreatePage(page, [&] (RenderPage* pageInstance) -> RenderObject* {
         pageInstance->set_before_layout_needed(false); // we do not need before and after layout
         pageInstance->set_after_layout_needed(false);
         pageInstance->set_platform_layout_needed(true);
-        return [self _parseRenderObject:data parent:nullptr index:0 pageId:page];
+        return [self _parseRenderObject:data parent:nullptr index:0 pageId:page reserveStyles:pageInstance->reserve_css_styles()];
     });
 }
 
@@ -1135,11 +1874,13 @@ static void _convertToCString(id _Nonnull obj, void (^callback)(const char*))
 
 + (void)callUpdateAttrs:(NSString*)pageId ref:(NSString*)ref data:(NSDictionary*)data
 {
+    SetConvertCurrentPage(pageId);
     WeexCore::RenderManager::GetInstance()->UpdateAttr([pageId UTF8String] ?: "", [ref UTF8String] ?: "", [self _parseMapValuePairs:data]);
 }
 
 + (void)callUpdateStyle:(NSString*)pageId ref:(NSString*)ref data:(NSDictionary*)data
 {
+    SetConvertCurrentPage(pageId);
     WeexCore::RenderManager::GetInstance()->UpdateStyle([pageId UTF8String] ?: "", [ref UTF8String] ?: "", [self _parseMapValuePairs:data]);
 }
 
@@ -1166,6 +1907,25 @@ static void _convertToCString(id _Nonnull obj, void (^callback)(const char*))
 + (void)callUpdateFinish:(NSString*)pageId
 {
     WeexCore::WeexCoreManager::Instance()->script_bridge()->core_side()->UpdateFinish([pageId UTF8String] ?: "", nullptr, 0, nullptr, 0);
+}
+
++ (void)registerCoreEnv:(NSString*)key withValue:(NSString*)value
+{
+    WeexCore::WeexCoreManager::Instance()->getPlatformBridge()->core_side()->RegisterCoreEnv([key UTF8String]?:"", [value UTF8String]?:"");
+}
+
++ (void)setPageArgument:(NSString*)pageId key:(NSString*)key value:(NSString*)value
+{
+    WeexCore::RenderManager::GetInstance()->setPageArgument([pageId UTF8String]?:"", [key UTF8String]?:"", [value UTF8String]?:"");
+}
+
++ (BOOL)isKeepingRawCssStyles:(NSString*)pageId
+{
+    RenderPageBase* page = RenderManager::GetInstance()->GetPage([pageId UTF8String] ?: "");
+    if (page == nullptr) {
+        return NO;
+    }
+    return static_cast<RenderPage*>(page)->reserve_css_styles();
 }
 
 @end

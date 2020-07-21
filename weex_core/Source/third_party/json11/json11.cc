@@ -146,7 +146,7 @@ void Json::dump(string &out) const {
  */
 
 template <Json::Type tag, typename T>
-class Value : public JsonValue {
+class Value : public JsonValue {//!OCLint
 protected:
 
     // Constructors
@@ -236,14 +236,14 @@ struct Statics {
 };
 
 static const Statics & statics() {
-    static const Statics s {};
-    return s;
+    static const Statics *s = new Statics();
+    return *s;
 }
 
 static const Json & static_null() {
     // This has to be separate, not in Statics, because Json() accesses statics().null.
-    static const Json json_null;
-    return json_null;
+    static const Json *json_null = new Json();
+    return *json_null;
 }
 
 /* * * * * * * * * * * * * * * * * * * *
@@ -430,7 +430,7 @@ struct JsonParser final {
           if (failed) return;
           consume_whitespace();
         }
-        while(comment_found);
+        while(comment_found); //!OCLint
       }
     }
 

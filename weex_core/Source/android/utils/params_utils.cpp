@@ -18,10 +18,10 @@
  */
 
 #include "android/utils/params_utils.h"
-#include "android/base/jni_type.h"
-#include "android/base/log_utils.h"
 #include "android/base/string/string_utils.h"
 #include "android/utils/so_utils.h"
+#include "base/android/jni_type.h"
+#include "base/android/log_utils.h"
 #include "core/config/core_environment.h"
 
 namespace WeexCore {
@@ -127,7 +127,7 @@ std::vector<INIT_FRAMEWORK_PARAMS*> initFromParam(
     JNIEnv* env, jobject params,
     const std::function<void(const char*, const char*)>&
         ReportNativeInitStatus) {
-  LOGE("initFromParam is running ");
+  LOGD("initFromParam is running ");
   std::vector<INIT_FRAMEWORK_PARAMS*> initFrameworkParams;
 
 #define ADDSTRING(name)                                                     \
@@ -169,6 +169,22 @@ std::vector<INIT_FRAMEWORK_PARAMS*> initFromParam(
   ADDSTRING(platform);
   env->DeleteLocalRef(platform);
 
+  jmethodID m_layoutDirection =
+          env->GetMethodID(c_params, "getLayoutDirection", "()Ljava/lang/String;");
+  if (m_layoutDirection == nullptr) {
+    ADDSTRING(nullptr);
+    ReportNativeInitStatus("-1012", "get m_layoutDirection failed");
+    return initFrameworkParams;
+  }
+  jobject layoutDirection = env->CallObjectMethod(params, m_layoutDirection);
+  if (layoutDirection == nullptr) {
+    ADDSTRING(nullptr);
+    ReportNativeInitStatus("-1012", "get layoutDirection failed");
+    return initFrameworkParams;
+  }
+  ADDSTRING(layoutDirection);
+  env->DeleteLocalRef(layoutDirection);
+
   jmethodID m_use_single_process =
       env->GetMethodID(c_params, "getUseSingleProcess", "()Ljava/lang/String;");
   if (m_use_single_process == nullptr) {
@@ -184,6 +200,24 @@ std::vector<INIT_FRAMEWORK_PARAMS*> initFromParam(
     } else {
       g_is_single_process = strstr(use_single_process, "true") != nullptr;
       env->DeleteLocalRef(j_use_single_process);
+    }
+  }
+
+  jmethodID m_use_runtime_api =  env->GetMethodID(c_params, "getUseRunTimeApi", "()Ljava/lang/String;");
+  if (m_use_runtime_api == nullptr) {
+    LOGE("m_use_runtime_api method is missing");
+    WXCoreEnvironment::getInstance()->setUseRunTimeApi(false);
+  } else {
+    jobject j_use_runtime_api =
+            env->CallObjectMethod(params, m_use_runtime_api);
+    const char* use_runtime_api_str =
+            env->GetStringUTFChars((jstring)(j_use_runtime_api), nullptr);
+    if (nullptr == use_runtime_api_str){
+      WXCoreEnvironment::getInstance()->setUseRunTimeApi(false);
+    } else{
+      bool use_runtime_api = strstr(use_runtime_api_str, "true") != nullptr;
+      WXCoreEnvironment::getInstance()->setUseRunTimeApi(use_runtime_api);
+      env->DeleteLocalRef(j_use_runtime_api);
     }
   }
 
@@ -238,6 +272,20 @@ std::vector<INIT_FRAMEWORK_PARAMS*> initFromParam(
     }
   }
 
+  jmethodID m_get_jsb_so_path =
+      env->GetMethodID(c_params, "getLibJsbPath", "()Ljava/lang/String;");
+  if (m_get_jsb_so_path != nullptr) {
+    jobject j_get_jsb_so_path =
+        env->CallObjectMethod(params, m_get_jsb_so_path);
+    if (j_get_jsb_so_path != nullptr) {
+      SoUtils::set_jsb_so_path(const_cast<char*>(
+                                    env->GetStringUTFChars((jstring)(j_get_jsb_so_path), nullptr)));
+      LOGD("g_jsbSoPath is %s ", SoUtils::jsb_so_path());
+      env->DeleteLocalRef(j_get_jsb_so_path);
+    }
+  }
+
+
   jmethodID m_get_lib_ld_path =
           env->GetMethodID(c_params, "getLibLdPath", "()Ljava/lang/String;");
   if (m_get_lib_ld_path != nullptr) {
@@ -246,7 +294,7 @@ std::vector<INIT_FRAMEWORK_PARAMS*> initFromParam(
     if (j_get_lib_ld_path != nullptr) {
       SoUtils::set_lib_ld_path(const_cast<char*>(
                                         env->GetStringUTFChars((jstring)(j_get_lib_ld_path), nullptr)));
-      LOGE("lib_ld_path is %s ", SoUtils::lib_ld_path());
+      LOGD("lib_ld_path is %s ", SoUtils::lib_ld_path());
       env->DeleteLocalRef(j_get_lib_ld_path);
     }
   }
@@ -356,7 +404,7 @@ std::vector<INIT_FRAMEWORK_PARAMS*> initFromParam(
   }
   if (!WXCoreEnvironment::getInstance()->SetDeviceWidth(
           jString2StrFast(env, reinterpret_cast<jstring&>(deviceWidth)))) {
-    LOGD("setDeviceWidth");
+    LOGD("setDeviceDisplay");
   }
   ADDSTRING(deviceWidth);
   env->DeleteLocalRef(deviceWidth);
@@ -395,7 +443,7 @@ std::vector<INIT_FRAMEWORK_PARAMS*> initFromParam(
     return initFrameworkParams;
   }
 
-  jclass jmapclass = env->FindClass("java/util/HashMap");
+  jclass jmapclass = env->FindClass("java/util/Map");
   jmethodID jkeysetmid =
       env->GetMethodID(jmapclass, "keySet", "()Ljava/util/Set;");
   jmethodID jgetmid = env->GetMethodID(
@@ -424,8 +472,13 @@ std::vector<INIT_FRAMEWORK_PARAMS*> initFromParam(
             genInitFrameworkParams(c_key_chars, c_value_chars));
         const std::string& key = jString2Str(env, jkey);
         if (key != "") {
+          const std::string &value = jString2Str(env, jvalue);
           WXCoreEnvironment::getInstance()->AddOption(key,
-                                                      jString2Str(env, jvalue));
+                                                      value);
+          if(key == "debugMode" && value == "true"){
+            __android_log_print(ANDROID_LOG_ERROR,"WeexCore","setDebugMode  2 ");
+            weex::base::LogImplement::getLog()->setDebugMode(true);
+          }
         }
       }
     }

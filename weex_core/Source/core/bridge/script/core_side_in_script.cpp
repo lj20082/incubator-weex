@@ -20,13 +20,18 @@
 #include "core/bridge/script/core_side_in_script.h"
 
 #include <cstdlib>
-#include "base/LogDefines.h"
+#include "base/log_defines.h"
 #include "base/make_copyable.h"
 #include "base/thread/waitable_event.h"
+#include "base/time_calculator.h"
 #include "core/manager/weex_core_manager.h"
 #include "core/render/manager/render_manager.h"
+#include "core/bridge/eagle_bridge.h"
+#include "wson/wson_parser.h"
+#include "core/config/core_environment.h"
 #ifdef OS_ANDROID
-#include "android/jsengine/multiprocess/ExtendJSApi.h"
+#include "core/parser/action_args_check.h"
+#include "android/weex_extend_js_api.h"
 #endif
 
 namespace WeexCore {
@@ -48,33 +53,31 @@ inline char *copyStr(const char *str, int length = 0) {
 void CoreSideInScript::CallNative(const char *page_id, const char *task,
                                   const char *callback) {
   if (page_id == nullptr || task == nullptr) return;
+#ifdef OS_ANDROID
+  if (WXCoreEnvironment::getInstance()->isUseRunTimeApi()){
+    if (isCallNativeToFinish(task)){
+      RenderManager::GetInstance()->CreateFinish(page_id);
+    } else {
+      WeexCoreManager::Instance()
+              ->getPlatformBridge()
+              ->platform_side()
+              ->CallNative(page_id, task, callback);
+    }
+    return;
+  }
+#endif
+  std::string task_str(task);
+  std::string target_str("[{\"module\":\"dom\",\"method\":\"createFinish\","
+                         "\"args\":[]}]");
+  std::string::size_type idx = task_str.find(target_str);
 
-  //  WeexCoreManager::Instance()->script_thread()->message_loop()->PostTask(
-  //      weex::base::MakeCopyable(
-  //          [pageId = std::unique_ptr<char[]>(copyStr(page_id)),
-  //           taskS = std::unique_ptr<char[]>(copyStr(task)),
-  //           callbackS = std::unique_ptr<char[]>(copyStr(callback))] {
-  //            if (strcmp(taskS.get(),
-  //                       "[{\"module\":\"dom\",\"method\":\"createFinish\","
-  //                       "\"args\":[]}]") == 0) {
-  //              RenderManager::GetInstance()->CreateFinish(pageId.get()) ? 0 :
-  //              -1;
-  //            } else {
-  //              WeexCoreManager::Instance()
-  //                  ->getPlatformBridge()
-  //                  ->platform_side()
-  //                  ->CallNative(pageId.get(), taskS.get(), callbackS.get());
-  //            }
-  //          }));
-  if (strcmp(task,
-             "[{\"module\":\"dom\",\"method\":\"createFinish\","
-             "\"args\":[]}]") == 0) {
-    RenderManager::GetInstance()->CreateFinish(page_id);
-  } else {
+  if(idx == std::string::npos) {
     WeexCoreManager::Instance()
         ->getPlatformBridge()
         ->platform_side()
         ->CallNative(page_id, task, callback);
+  } else {
+    RenderManager::GetInstance()->CreateFinish(page_id);
   }
 }
 
@@ -82,18 +85,11 @@ std::unique_ptr<ValueWithType> CoreSideInScript::CallNativeModule(
     const char *page_id, const char *module, const char *method,
     const char *arguments, int arguments_length, const char *options,
     int options_length) {
-  std::unique_ptr<ValueWithType> ret(new ValueWithType);
-  ret->type = ParamsType::INT32;
-  ret->value.int32Value = -1;
+  std::unique_ptr<ValueWithType> ret(new ValueWithType((int32_t)-1));
   if (page_id != nullptr && module != nullptr && method != nullptr) {
-    RenderManager::GetInstance()->CallNativeModule(page_id, module, method,
-                                                   arguments, arguments_length,
-                                                   options, options_length);
-    return WeexCoreManager::Instance()
-        ->getPlatformBridge()
-        ->platform_side()
-        ->CallNativeModule(page_id, module, method, arguments, arguments_length,
-                           options, options_length);
+    return RenderManager::GetInstance()->CallNativeModule(page_id, module, method,
+                                                          arguments, arguments_length,
+                                                          options, options_length);
   }
 
   return ret;
@@ -106,38 +102,21 @@ void CoreSideInScript::CallNativeComponent(const char *page_id, const char *ref,
                                            const char *options,
                                            int options_length) {
   if (page_id != nullptr && ref != nullptr && method != nullptr) {
-    //    WeexCoreManager::Instance()->script_thread()->message_loop()->PostTask(
-    //        weex::base::MakeCopyable(
-    //            [pageId = std::unique_ptr<char[]>(copyStr(page_id)),
-    //             refS = std::unique_ptr<char[]>(copyStr(ref)),
-    //             methodS = std::unique_ptr<char[]>(copyStr(method)),
-    //             argumentsS =
-    //                 std::unique_ptr<char[]>(copyStr(arguments,
-    //                 arguments_length)),
-    //             argLen = arguments_length,
-    //             optionsS =
-    //                 std::unique_ptr<char[]>(copyStr(options,
-    //                 options_length)),
-    //             optLen = options_length] {
-    //              WeexCoreManager::Instance()
-    //                  ->getPlatformBridge()
-    //                  ->platform_side()
-    //                  ->CallNativeComponent(pageId.get(), refS.get(),
-    //                  methodS.get(),
-    //                                        argumentsS.get(), argLen,
-    //                                        optionsS.get(), optLen);
-    //            }));
-    WeexCoreManager::Instance()
-        ->getPlatformBridge()
-        ->platform_side()
-        ->CallNativeComponent(page_id, ref, method, arguments, arguments_length,
-                              options, options_length);
+    RenderManager::GetInstance()->CallNativeComponent(page_id, ref, method, arguments, arguments_length, options, options_length);
   }
 }
 
 void CoreSideInScript::AddElement(const char *page_id, const char *parent_ref,
                                   const char *dom_str, int dom_str_length,
                                   const char *index_str) {
+
+  
+  std::string msg = "AddElement";
+//  wson_parser parser(dom_str);
+//  msg.append(parser.toStringUTF8().c_str());
+//
+  weex::base::TimeCalculator timeCalculator(weex::base::TaskPlatform::WEEXCORE, msg.c_str(), page_id);
+
   const char *indexChar = index_str == nullptr ? "\0" : index_str;
   int index = atoi(indexChar);
   if (page_id == nullptr || parent_ref == nullptr || dom_str == nullptr ||
@@ -415,6 +394,15 @@ void CoreSideInScript::DispatchMessage(const char *client_id, const char *data, 
       ->DispatchMessage(client_id, data, dataLength, callback, vm_id);
 }
 
+std::unique_ptr<WeexJSResult> CoreSideInScript::DispatchMessageSync(
+    const char *client_id, const char *data, int dataLength,
+    const char *vm_id) {
+  return WeexCoreManager::Instance()
+      ->getPlatformBridge()
+      ->platform_side()
+      ->DispatchMessageSync(client_id, data, dataLength, vm_id);
+}
+
 void CoreSideInScript::ReportException(const char *page_id, const char *func,
                                        const char *exception_string) {
   //  WeexCoreManager::Instance()->script_thread()->message_loop()->PostTask(
@@ -436,7 +424,7 @@ void CoreSideInScript::ReportException(const char *page_id, const char *func,
 }
 
 void CoreSideInScript::SetJSVersion(const char *js_version) {
-  LOGA("init JSFrm version %s", js_version);
+  LOGD("init JSFrm version %s", js_version);
 
   //  WeexCoreManager::Instance()->script_thread()->message_loop()->PostTask(
   //      weex::base::MakeCopyable(
@@ -459,4 +447,26 @@ void CoreSideInScript::OnReceivedResult(long callback_id,
       ->platform_side()
       ->OnReceivedResult(callback_id, result);
 }
+
+void CoreSideInScript::UpdateComponentData(const char* page_id,
+                                           const char* cid,
+                                           const char* json_data) {
+    auto handler = EagleBridge::GetInstance()->data_render_handler();
+    if(handler){
+      handler->UpdateComponentData(page_id, cid, json_data);
+    }
+    else{
+      WeexCore::WeexCoreManager::Instance()->getPlatformBridge()->platform_side()->ReportException(
+        page_id, "UpdateComponentData", 
+        "There is no data_render_handler when UpdateComponentData invoked");
+    }
+}
+
+bool CoreSideInScript::Log(int level, const char *tag,
+         const char *file,
+         unsigned long line,
+         const char *log) {
+  return weex::base::LogImplement::getLog()->log((LogLevel) level, tag, file, line, log);
+}
+
 }  // namespace WeexCore

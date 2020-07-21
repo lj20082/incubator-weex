@@ -79,8 +79,20 @@ class AndroidSide : public PlatformBridge::PlatformSide {
                  std::set<std::string>* events, const WXCoreMargin& margins,
                  const WXCorePadding& paddings,
                  const WXCoreBorderWidth& borders, bool willLayout) override;
+  int AddChildToRichtext(const char *pageId, const char *nodeType, const char *ref, const char *parentRef,
+                         const char *richtextRef, std::map<std::string, std::string> *styles,
+                         std::map<std::string, std::string> *attributes) override;
+  int RemoveChildFromRichtext(const char *pageId, const char *ref, const char *parent_ref,
+                              const char *richtext_ref) override;
+  int UpdateRichtextStyle(const char *pageId, const char *ref,
+                          std::vector<std::pair<std::string, std::string>> *style, const char *parent_ref,
+                          const char *richtext_ref) override;
+  int UpdateRichtextChildAttr(const char *pageId, const char *ref,
+                              std::vector<std::pair<std::string, std::string>> *attrs,
+                              const char *parent_ref, const char *richtext_ref) override;
   int Layout(const char* page_id, const char* ref, float top, float bottom,
-             float left, float right, float height, float width, int index) override;
+             float left, float right, float height, float width, bool isRTL,
+             int index) override;
 
   int UpdateStyle(
       const char* pageId, const char* ref,
@@ -109,6 +121,10 @@ class AndroidSide : public PlatformBridge::PlatformSide {
   void PostMessage(const char* vm_id, const char* data, int dataLength) override;
   void DispatchMessage(const char* client_id,
                        const char* data, int dataLength, const char* callback, const char* vm_id) override;
+  std::unique_ptr<WeexJSResult> DispatchMessageSync(const char* client_id,
+                                                    const char* data,
+                                                    int dataLength,
+                                                    const char* vm_id) override;
   void OnReceivedResult(long callback_id, std::unique_ptr<WeexJSResult>& result) override;
 
   jobject getMeasureFunc(const char* pageId, jlong renderObjectPtr);

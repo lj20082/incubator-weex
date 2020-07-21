@@ -24,6 +24,7 @@
 
 #include "core/bridge/platform_bridge.h"
 #include "core/layout/measure_func_adapter.h"
+#include "base/closure.h"
 
 namespace WeexCore
 {
@@ -56,7 +57,8 @@ namespace WeexCore
         
         void CallNativeComponent(const char* pageId, const char* ref, const char *method,
                                  const char *arguments, int argumentsLength, const char *options, int optionsLength) override;
-        
+        std::unique_ptr<ValueWithType> RegisterPluginModule(const char *name, const char *class_name, const char *version) override;
+        std::unique_ptr<ValueWithType> RegisterPluginComponent(const char *name, const char *class_name, const char *version) override;
         void SetTimeout(const char* callbackID, const char* time) override ;
         
         void NativeLog(const char* str_array) override ;
@@ -88,9 +90,14 @@ namespace WeexCore
                            const WXCoreBorderWidth &borders,
                            bool willLayout= true) override;
         
+        int AddChildToRichtext(const char* pageId, const char *nodeType, const char* ref,
+                                 const char* parentRef, const char* richtextRef,
+                                 std::map<std::string, std::string> *styles,
+                                 std::map<std::string, std::string> *attributes) override;
+
         int Layout(const char* pageId, const char* ref,
                        float top, float bottom, float left, float right,
-                       float height, float width, int index) override;
+                       float height, float width, bool isRTL, int index) override;
         
         int UpdateStyle(const char* pageId, const char* ref,
                             std::vector<std::pair<std::string, std::string>> *style,
@@ -98,15 +105,24 @@ namespace WeexCore
                             std::vector<std::pair<std::string, std::string>> *padding,
                             std::vector<std::pair<std::string, std::string>> *border) override;
         
+        int UpdateRichtextStyle(const char* pageId, const char* ref,
+                                         std::vector<std::pair<std::string, std::string>> *style,
+                                         const char* parent_ref, const char* richtext_ref) override;
+
         int UpdateAttr(const char* pageId, const char* ref,
                            std::vector<std::pair<std::string, std::string>> *attrs) override;
         
+        int UpdateRichtextChildAttr(const char* pageId, const char* ref,
+                       std::vector<std::pair<std::string, std::string>> *attrs,  const char* parent_ref, const char* richtext_ref) override;
+
         int CreateFinish(const char* pageId) override;
         
         int RenderSuccess(const char* pageId) override;
         
         int RemoveElement(const char* pageId, const char* ref) override;
         
+        int RemoveChildFromRichtext(const char* pageId, const char* ref, const char* parent_ref, const char* richtext_ref) override;
+
         int MoveElement(const char* pageId, const char* ref, const char* parentRef, int index) override;
         
         int AppendTreeCreateFinish(const char* pageId, const char* ref) override;
@@ -116,7 +132,15 @@ namespace WeexCore
         void PostMessage(const char* vm_id, const char* data, int dataLength) override {};
         void DispatchMessage(const char* client_id,
                              const char* data, int dataLength, const char* callback, const char* vm_id) override {};
+        
+        std::unique_ptr<WeexJSResult> DispatchMessageSync(const char* client_id, const char* data,
+                                                          int dataLength, const char* vm_id) override {
+            return std::unique_ptr<WeexJSResult>();
+        }
+        
         void OnReceivedResult(long callback_id, std::unique_ptr<WeexJSResult>& result) override {};
+
+        void PostTaskOnComponentThread(const weex::base::Closure closure) override;
     };
     
     class WXCoreMeasureFunctionBridge : public MeasureFunctionAdapter
@@ -137,27 +161,82 @@ namespace WeexCore
 
 // For Objective-C use
 
+// Bridge for custom page like Heron
+@interface WXCustomPageBridge : NSObject
+
++ (instancetype)sharedInstance;
+
++ (BOOL)isCustomPage:(NSString*)pageId;
+
++ (NSSet<NSString*>*)getAvailableCustomRenderTypes;
+
++ (UIView*)createPageRootView:(NSString*)pageId pageType:(NSString*)pageType frame:(CGRect)frame;
+
+- (void)invalidatePage:(NSString*)pageId;
+
+- (void)removePage:(NSString*)pageId;
+
+- (void)callCreateBody:(NSString*)pageId data:(NSDictionary*)data;
+
+- (void)callAddElement:(NSString*)pageId parentRef:(NSString*)parentRef data:(NSDictionary*)data index:(int)index;
+
+- (void)callRemoveElement:(NSString*)pageId ref:(NSString*)ref;
+
+- (void)callMoveElement:(NSString*)pageId ref:(NSString*)ref parentRef:(NSString*)parentRef index:(int)index;
+
+- (void)callUpdateAttrs:(NSString*)pageId ref:(NSString*)ref data:(NSDictionary*)data;
+
+- (void)callUpdateStyle:(NSString*)pageId ref:(NSString*)ref data:(NSDictionary*)data;
+
+- (void)callAddEvent:(NSString*)pageId ref:(NSString*)ref event:(NSString*)event;
+
+- (void)callRemoveEvent:(NSString*)pageId ref:(NSString*)ref event:(NSString*)event;
+
+- (void)callCreateFinish:(NSString*)pageId;
+
+- (void)callRefreshFinish:(NSString*)pageId;
+
+- (void)callUpdateFinish:(NSString*)pageId;
+
+- (BOOL)forwardCallNativeModuleToCustomPage:(NSString*)pageId
+                                 moduleName:(NSString*)moduleName methodName:(NSString*)methodName
+                                  arguments:(NSArray*)arguments options:(NSDictionary*)options
+                                returnValue:(id*)returnValue;
+
+- (void)forwardCallComponentToCustomPage:(NSString*)pageId
+                                     ref:(NSString*)ref
+                              methodName:(NSString*)methodName
+                               arguments:(NSArray*)arguments
+                                 options:(NSDictionary*)options;
+
+@end
+
+// Bridge for WeexCore
 @interface WXCoreBridge : NSObject
 
 + (void)install;
-
-+ (void)createDataRenderInstance:(NSString *)pageId template:(NSString *)temp options:(NSDictionary *)options data:(id)data;
-
-+ (void)createDataRenderInstance:(NSString *)pageId contents:(NSData *)contents options:(NSDictionary *)options  data:(id)data;
-
-+ (void)destroyDataRenderInstance:(NSString *)pageId;
-
-+ (void)refreshDataRenderInstance:(NSString *)pageId data:(NSString *)data;
 
 + (void)setDefaultDimensionIntoRoot:(NSString*)pageId width:(CGFloat)width height:(CGFloat)height
                  isWidthWrapContent:(BOOL)isWidthWrapContent
                 isHeightWrapContent:(BOOL)isHeightWrapContent;
 
+// Set/Get GLOBAL device size which will affect all pages
++ (void)setDeviceSize:(CGSize)size;
++ (CGSize)getDeviceSize;
+
+// DO NOT call this method directly, you should use WXSDKInstance
 + (void)setViewportWidth:(NSString*)pageId width:(CGFloat)width;
+
+// DO NOT call this method directly, you should use WXSDKInstance
++ (void)setPageRequired:(NSString *)pageId width:(CGFloat)width height:(CGFloat)height;
 
 + (void)layoutPage:(NSString*)pageId forced:(BOOL)forced;
 
++ (double)getLayoutTime:(NSString*)pageId;
+
 + (void)closePage:(NSString*)pageId;
+
++ (BOOL)reloadPageLayout:(NSString*)pageId;
 
 + (void)layoutRenderObject:(void*)object size:(CGSize)size page:(NSString*)pageId;
 
@@ -189,9 +268,15 @@ namespace WeexCore
 
 + (void)callUpdateFinish:(NSString*)pageId;
 
-+ (void)fireEvent:(NSString *)pageId ref:(NSString *)ref event:(NSString *)event args:(NSDictionary *)args;
++ (void)registerComponentAffineType:(NSString *)type asType:(NSString *)baseType;
 
-+ (void)registerModules:(NSDictionary *)modules;
++ (BOOL)isComponentAffineType:(NSString *)type asType:(NSString *)baseType;
+
++ (void)registerCoreEnv:(NSString*)key withValue:(NSString*)value;
+
++ (void)setPageArgument:(NSString*)pageId key:(NSString*)key value:(NSString*)value;
+
++ (BOOL)isKeepingRawCssStyles:(NSString*)pageId;
 
 @end
 

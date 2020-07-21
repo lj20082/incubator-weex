@@ -18,6 +18,7 @@
  */
 
 #import "WXDomModule.h"
+#import "WXComponent+Layout.h"
 #import "WXDefine.h"
 #import "WXSDKManager.h"
 #import "WXComponentManager.h"
@@ -27,7 +28,6 @@
 #import "WXUtility.h"
 #import "WXRuleManager.h"
 #import "WXSDKInstance.h"
-#import "WXTracingManager.h"
 #import "WXRecycleListComponent.h"
 #import "WXCoreBridge.h"
 #import <objc/message.h>
@@ -54,7 +54,10 @@ WX_EXPORT_METHOD(@selector(updateStyle:styles:))
 WX_EXPORT_METHOD(@selector(updateAttrs:attrs:))
 WX_EXPORT_METHOD(@selector(addRule:rule:))
 WX_EXPORT_METHOD(@selector(getComponentRect:callback:))
+WX_EXPORT_METHOD(@selector(getLayoutDirection:callback:))
 WX_EXPORT_METHOD(@selector(updateComponentData:componentData:callback:))
+WX_EXPORT_METHOD(@selector(beginBatchMark))
+WX_EXPORT_METHOD(@selector(endBatchMark))
 
 - (void)performBlockOnComponentManager:(void(^)(WXComponentManager *))block
 {
@@ -82,6 +85,20 @@ WX_EXPORT_METHOD(@selector(updateComponentData:componentData:callback:))
     });
 }
 
+- (void)beginBatchMark
+{
+    [self performBlockOnComponentManager:^(WXComponentManager *manager) {
+        [manager performBatchBegin];
+    }];
+}
+
+- (void)endBatchMark
+{
+    [self performBlockOnComponentManager:^(WXComponentManager * manager) {
+        [manager performBatchEnd];
+    }];
+}
+
 - (NSThread *)targetExecuteThread
 {
     return [WXComponentManager componentThread];
@@ -91,7 +108,6 @@ WX_EXPORT_METHOD(@selector(updateComponentData:componentData:callback:))
 {
     NSString* instanceId = self.weexInstance.instanceId;
     WXPerformBlockOnComponentThread(^{
-        [WXTracingManager startTracingWithInstanceId:instanceId ref:bodyData[@"ref"] className:nil name:WXTDomCall phase:WXTracingBegin functionName:@"createBody" options:@{@"threadName":WXTDOMThread}];
         [WXCoreBridge callCreateBody:instanceId data:bodyData];
     });
 }
@@ -100,7 +116,6 @@ WX_EXPORT_METHOD(@selector(updateComponentData:componentData:callback:))
 {
     NSString* instanceId = self.weexInstance.instanceId;
     WXPerformBlockOnComponentThread(^{
-        [WXTracingManager startTracingWithInstanceId:instanceId ref:elementData[@"ref"] className:nil name:WXTDomCall phase:WXTracingBegin functionName:@"addElement" options:@{@"threadName":WXTDOMThread}];
         [WXCoreBridge callAddElement:instanceId parentRef:parentRef data:elementData index:(int)index];
     });
 }
@@ -109,7 +124,6 @@ WX_EXPORT_METHOD(@selector(updateComponentData:componentData:callback:))
 {
     NSString* instanceId = self.weexInstance.instanceId;
     WXPerformBlockOnComponentThread(^{
-        [WXTracingManager startTracingWithInstanceId:instanceId ref:ref className:nil name:WXTDomCall phase:WXTracingBegin functionName:@"removeElement" options:@{@"threadName":WXTDOMThread}];
         [WXCoreBridge callRemoveElement:instanceId ref:ref];
     });
 }
@@ -118,7 +132,6 @@ WX_EXPORT_METHOD(@selector(updateComponentData:componentData:callback:))
 {
     NSString* instanceId = self.weexInstance.instanceId;
     WXPerformBlockOnComponentThread(^{
-        [WXTracingManager startTracingWithInstanceId:instanceId ref:ref className:nil name:WXTDomCall phase:WXTracingBegin functionName:@"moveElement" options:@{@"threadName":WXTDOMThread}];
         [WXCoreBridge callMoveElement:instanceId ref:ref parentRef:parentRef index:(int)index];
     });
 }
@@ -127,7 +140,6 @@ WX_EXPORT_METHOD(@selector(updateComponentData:componentData:callback:))
 {
     NSString* instanceId = self.weexInstance.instanceId;
     WXPerformBlockOnComponentThread(^{
-        [WXTracingManager startTracingWithInstanceId:instanceId ref:ref className:nil name:WXTDomCall phase:WXTracingBegin functionName:@"addEvent" options:@{@"threadName":WXTDOMThread}];
         [WXCoreBridge callAddEvent:instanceId ref:ref event:event];
     });
 }
@@ -136,7 +148,6 @@ WX_EXPORT_METHOD(@selector(updateComponentData:componentData:callback:))
 {
     NSString* instanceId = self.weexInstance.instanceId;
     WXPerformBlockOnComponentThread(^{
-        [WXTracingManager startTracingWithInstanceId:instanceId ref:ref className:nil name:WXTDomCall phase:WXTracingBegin functionName:@"removeEvent" options:@{@"threadName":WXTDOMThread}];
         [WXCoreBridge callRemoveEvent:instanceId ref:ref event:event];
     });
 }
@@ -144,17 +155,20 @@ WX_EXPORT_METHOD(@selector(updateComponentData:componentData:callback:))
 - (void)createFinish
 {
     NSString* instanceId = self.weexInstance.instanceId;
-    WXPerformBlockOnComponentThread(^{
-        [WXTracingManager startTracingWithInstanceId:instanceId ref:nil className:nil name:WXTDomCall phase:WXTracingBegin functionName:@"createFinish" options:@{@"threadName":WXTDOMThread}];
-        [WXCoreBridge callCreateFinish:instanceId];
-    });
+    if ([WXCustomPageBridge isCustomPage:instanceId]) {
+        [[WXCustomPageBridge sharedInstance] callCreateFinish:instanceId];
+    }
+    else {
+        WXPerformBlockOnComponentThread(^{
+            [WXCoreBridge callCreateFinish:instanceId];
+        });
+    }
 }
 
 - (void)updateFinish
 {
     NSString* instanceId = self.weexInstance.instanceId;
     WXPerformBlockOnComponentThread(^{
-        [WXTracingManager startTracingWithInstanceId:instanceId ref:nil className:nil name:WXTDomCall phase:WXTracingBegin functionName:@"updateFinish" options:@{@"threadName":WXTDOMThread}];
         [WXCoreBridge callUpdateFinish:instanceId];
     });
 }
@@ -163,7 +177,6 @@ WX_EXPORT_METHOD(@selector(updateComponentData:componentData:callback:))
 {
     NSString* instanceId = self.weexInstance.instanceId;
     WXPerformBlockOnComponentThread(^{
-        [WXTracingManager startTracingWithInstanceId:instanceId ref:nil className:nil name:WXTDomCall phase:WXTracingBegin functionName:@"refreshFinish" options:@{@"threadName":WXTDOMThread}];
         [WXCoreBridge callRefreshFinish:instanceId];
     });
 }
@@ -179,7 +192,6 @@ WX_EXPORT_METHOD(@selector(updateComponentData:componentData:callback:))
 {
     NSString* instanceId = self.weexInstance.instanceId;
     WXPerformBlockOnComponentThread(^{
-        [WXTracingManager startTracingWithInstanceId:instanceId ref:ref className:nil name:WXTDomCall phase:WXTracingBegin functionName:@"updateStyle" options:@{@"threadName":WXTDOMThread}];
         [WXCoreBridge callUpdateStyle:instanceId ref:ref data:styles];
     });
 }
@@ -188,7 +200,6 @@ WX_EXPORT_METHOD(@selector(updateComponentData:componentData:callback:))
 {
     NSString* instanceId = self.weexInstance.instanceId;
     WXPerformBlockOnComponentThread(^{
-        [WXTracingManager startTracingWithInstanceId:instanceId ref:ref className:nil name:WXTDomCall phase:WXTracingBegin functionName:@"updateAttrs" options:@{@"threadName":WXTDOMThread}];
         [WXCoreBridge callUpdateAttrs:instanceId ref:ref data:attrs];
     });
 }
@@ -205,6 +216,13 @@ WX_EXPORT_METHOD(@selector(updateComponentData:componentData:callback:))
 }
 
 - (void)getComponentRect:(NSString*)ref callback:(WXModuleKeepAliveCallback)callback {
+    if (ref == nil || ![ref isKindOfClass:[NSString class]]) {
+        if (callback) {
+            callback(@{@"result": @(NO), @"errMsg": @"Illegal parameter, ref must be a string."}, false);
+        }
+        return;
+    }
+    
     [self performBlockOnComponentManager:^(WXComponentManager * manager) {
         if ([ref isEqualToString:@"viewport"]) {
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -241,6 +259,30 @@ WX_EXPORT_METHOD(@selector(updateComponentData:componentData:callback:))
                 }
             });
 
+        }
+    }];
+}
+
+- (void)getLayoutDirection:(NSString*)ref callback:(WXModuleKeepAliveCallback)callback {
+    [self performBlockOnComponentManager:^(WXComponentManager * manager) {
+        if ([ref isEqualToString:@"viewport"]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                NSString *direction = [WXUtility getEnvLayoutDirection] == WXLayoutDirectionRTL ? @"rtl" : @"ltr";
+                if (callback) {
+                    callback(direction, false);
+                }
+            });
+        } else {
+            WXComponent *component = [manager componentForRef:ref];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                NSString *direction = @"unknow";
+                if (component) {
+                    direction = [component isDirectionRTL] ? @"rtl" : @"ltr";
+                }
+                if (callback) {
+                    callback(direction, false);
+                }
+            });
         }
     }];
 }

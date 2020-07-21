@@ -27,8 +27,8 @@
 #import "WXPrerenderManager.h"
 #import "WXMonitor.h"
 /********/
-#import <UIImage+GIF.h>
-#import <Masonry.h>
+#import "UIImage+GIF.h"
+#import "Masonry.h"
 /********/
 
 @interface WXBaseViewController ()
@@ -175,7 +175,6 @@
         }
     }
 #endif
-    
     __weak typeof(self) weakSelf = self;
     
     [self.view addSubview:self.loadingView];
@@ -198,6 +197,7 @@
         [weakSelf.loadingView removeFromSuperview];
     };
     /********/
+//    [_instance renderWithURL:[NSURL URLWithString:newURL] options:@{@"bundleUrl":sourceURL.absoluteString} data:nil];
     
     if([WXPrerenderManager isTaskReady:[self.sourceURL absoluteString]]){
         WX_MONITOR_INSTANCE_PERF_START(WXPTJSDownload, _instance);
